@@ -1,0 +1,2375 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>【Suno用】WAV音源マスタリング前仕上げツール</title>
+  <meta name="description" content="Sunoで生成したWAV音源を解析し、曲頭のプツッ音、不要な超低域、低中域の濁り、中高域の刺さり、高域のチリつき・シュワシュワ感、再生成区間の音質差などを確認・修正するためのツールです。元のパンや空間表現をできるだけ残しながら、マスタリング前の状態に整えます。" />
+  <style>
+:root {
+  --bg: #0b0d11;
+  --panel: #12161c;
+  --panel-2: #171c23;
+  --line: #2a313b;
+  --text: #f2f4f7;
+  --muted: #929baa;
+  --accent: #f3f4f6;
+  --ok: #80d39b;
+  --low: #89a9ff;
+  --med: #f0bf6a;
+  --high: #ef7777;
+  --cyan: #70d8da;
+  --purple: #b599ff;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--text); font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+body { padding: 0 22px; }
+button, input, select { font: inherit; }
+button { cursor: pointer; }
+
+.topbar {
+  max-width: 1500px;
+  margin: 0 auto;
+  padding: 34px 0 24px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  border-bottom: 1px solid var(--line);
+}
+
+.eyebrow, .section-label {
+  margin: 0 0 8px;
+  font-size: 11px;
+  letter-spacing: .16em;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+h1, h2, p { margin-top: 0; }
+h1 { margin-bottom: 8px; font-size: clamp(24px, 3vw, 40px); line-height: 1; letter-spacing: -.03em; }
+h1 span { color: var(--muted); font-weight: 500; font-size: .55em; }
+h2 { margin-bottom: 0; font-size: 18px; }
+.tagline { margin: 0; color: var(--muted); }
+
+.privacy-badge {
+  min-width: 190px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  background: #0e1217;
+  text-align: right;
+  font-size: 12px;
+  letter-spacing: .12em;
+  font-weight: 800;
+}
+.privacy-badge small { color: var(--muted); letter-spacing: 0; font-weight: 500; }
+
+main { max-width: 1500px; margin: 0 auto; padding: 26px 0 50px; }
+.hidden { display: none !important; }
+.muted { color: var(--muted); }
+
+.drop-zone {
+  min-height: 420px;
+  border: 1px dashed #4a535f;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.02), transparent 30%),
+    var(--panel);
+  display: grid;
+  place-items: center;
+  transition: .18s ease;
+}
+.drop-zone.dragover { border-color: var(--accent); background: #151a21; transform: translateY(-1px); }
+.drop-inner { text-align: center; padding: 30px; }
+.drop-inner h2 { font-size: 28px; margin-bottom: 10px; }
+.drop-icon {
+  width: 78px; height: 78px; margin: 0 auto 20px;
+  border: 1px solid var(--line);
+  display: grid; place-items: center;
+  font-weight: 900; letter-spacing: .12em;
+  background: #0e1116;
+}
+
+.button {
+  border: 1px solid var(--line);
+  color: var(--text);
+  background: #181d24;
+  padding: 10px 14px;
+  border-radius: 3px;
+}
+.button:hover { background: #222933; }
+.button.primary { background: var(--text); color: #111; border-color: var(--text); font-weight: 800; }
+.button.primary:hover { background: #dfe3e8; }
+.button.small { padding: 7px 10px; font-size: 12px; }
+.button.ghost { color: var(--muted); background: transparent; }
+.button.active { outline: 1px solid var(--cyan); color: var(--cyan); }
+
+.workspace { display: grid; gap: 18px; }
+.card { border: 1px solid var(--line); background: var(--panel); padding: 18px; }
+.track-header { display: flex; justify-content: space-between; gap: 20px; align-items: center; }
+.track-meta { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 8px; color: var(--muted); font-size: 13px; }
+.transport { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.main-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(310px, .85fr); gap: 18px; }
+.lower-grid { display: grid; grid-template-columns: 1.2fr .8fr; gap: 18px; }
+.card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.region-tools, .filter-row { display: flex; gap: 7px; flex-wrap: wrap; }
+
+.wave-wrap { position: relative; background: #0a0d11; border: 1px solid #242a32; overflow: hidden; }
+#waveCanvas { display: block; width: 100%; height: 360px; touch-action: none; }
+.selection-info {
+  position: absolute;
+  left: 12px; bottom: 10px;
+  padding: 7px 9px;
+  background: rgba(8,10,13,.9);
+  border: 1px solid var(--line);
+  color: var(--cyan);
+  font-size: 12px;
+  pointer-events: none;
+}
+.time-readout { margin: 0; font-variant-numeric: tabular-nums; font-size: 13px; color: var(--muted); }
+.playback-tools { margin-top: 12px; display: flex; gap: 16px; align-items: center; color: var(--muted); font-size: 12px; }
+.playback-tools label { display: flex; align-items: center; gap: 8px; }
+select { background: #0e1217; border: 1px solid var(--line); color: var(--text); padding: 6px 8px; }
+.checkbox-row input { accent-color: var(--accent); }
+
+.state-pill {
+  border: 1px solid var(--line);
+  padding: 5px 8px;
+  font-size: 10px;
+  letter-spacing: .08em;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.state-pill.running { color: var(--med); border-color: #5b4d32; }
+.state-pill.done { color: var(--ok); border-color: #315440; }
+.state-pill.preserve { color: var(--cyan); }
+
+.summary-list { display: grid; gap: 8px; }
+.summary-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid #232932;
+}
+.summary-item:last-child { border-bottom: 0; }
+.summary-name { font-size: 13px; font-weight: 750; letter-spacing: .03em; }
+.summary-sub { margin-top: 4px; color: var(--muted); font-size: 11px; }
+.severity { font-size: 11px; font-weight: 850; letter-spacing: .06em; }
+.severity.ok { color: var(--ok); }
+.severity.low { color: var(--low); }
+.severity.medium { color: var(--med); }
+.severity.high { color: var(--high); }
+
+.event-list { display: grid; gap: 8px; max-height: 560px; overflow: auto; padding-right: 4px; }
+.event-row {
+  display: grid;
+  grid-template-columns: 105px 120px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid #242a32;
+  background: #0f1318;
+  padding: 10px;
+}
+.event-row:hover { border-color: #3c4551; }
+.event-type { font-size: 11px; font-weight: 850; letter-spacing: .05em; }
+.event-time { font-variant-numeric: tabular-nums; font-size: 12px; }
+.event-detail { font-size: 12px; color: var(--muted); }
+.event-actions { display: flex; gap: 6px; }
+.event-actions button { padding: 5px 8px; font-size: 11px; }
+
+.section-report { margin-top: 14px; display: grid; gap: 10px; }
+.metric {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid #232932;
+}
+.metric:last-child { border-bottom: 0; }
+.metric span:first-child { color: var(--muted); font-size: 12px; }
+.metric strong { font-variant-numeric: tabular-nums; }
+
+.report-box { font-size: 13px; color: var(--muted); line-height: 1.7; white-space: pre-line; }
+.report-box strong { color: var(--text); }
+
+footer { max-width: 1500px; margin: 0 auto; padding: 18px 0 34px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; }
+
+@media (max-width: 980px) {
+  .topbar, .track-header { flex-direction: column; }
+  .privacy-badge { text-align: left; }
+  .transport { justify-content: flex-start; }
+  .main-grid, .lower-grid { grid-template-columns: 1fr; }
+  .event-row { grid-template-columns: 90px 105px 1fr; }
+  .event-actions { grid-column: 1 / -1; }
+}
+
+/* v0.2 guided repair */
+.progress-card { padding: 14px 18px 16px; }
+.progress-head { display:flex; justify-content:space-between; gap:16px; align-items:center; margin-bottom:10px; }
+.progress-head strong { font-size:13px; }
+.progress-track { height:6px; background:#0b0e12; border:1px solid #222933; overflow:hidden; }
+.progress-bar { width:0; height:100%; background:linear-gradient(90deg,#dfe3e8,#70d8da); transition:width .2s ease; }
+
+.preserve-box { margin-top:14px; padding:12px; border:1px solid #26333a; background:#0d1418; display:grid; gap:5px; }
+.preserve-box strong { font-size:11px; letter-spacing:.1em; color:var(--cyan); }
+.preserve-box span { font-size:11px; color:var(--muted); line-height:1.55; }
+
+.repair-card { padding-bottom:22px; }
+.intro-copy { margin-bottom:18px; }
+.approval-count { font-size:12px; color:var(--muted); }
+.approval-count strong { color:var(--text); font-size:20px; margin-right:4px; }
+.issue-list { display:grid; gap:12px; }
+.issue-card { border:1px solid #29303a; background:#0f1318; padding:14px; transition:.15s ease; }
+.issue-card.approved { border-color:#3f6550; box-shadow:inset 3px 0 0 var(--ok); }
+.issue-head { display:flex; justify-content:space-between; gap:14px; align-items:flex-start; }
+.issue-head > div { display:flex; gap:10px; align-items:center; min-width:0; }
+.issue-head h3 { margin:0; font-size:15px; line-height:1.35; }
+.confidence { color:var(--muted); font-size:11px; white-space:nowrap; }
+.issue-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:12px; }
+.issue-grid p { margin:4px 0 0; color:#c1c7d0; font-size:12px; line-height:1.65; }
+.issue-label { color:var(--muted); font-size:10px; letter-spacing:.12em; font-weight:800; }
+.issue-actions { margin-top:13px; display:flex; flex-wrap:wrap; gap:7px; align-items:center; }
+.issue-actions .approve.active { color:#0e1712; background:var(--ok); border-color:var(--ok); font-weight:850; }
+.warning-only { color:var(--med); font-size:11px; border:1px solid #594a30; padding:7px 9px; }
+.preview-status { font-size:10px; color:var(--cyan); letter-spacing:.08em; margin-left:4px; }
+.issue-times { display:flex; flex-wrap:wrap; gap:6px; margin-top:12px; }
+.time-chip { border:1px solid #2b333e; background:#111820; color:#aab4c1; font-size:10px; padding:5px 7px; cursor:pointer; }
+.time-chip:hover { color:var(--text); border-color:#4a5564; }
+.clean-state { border:1px solid #315440; padding:18px; display:grid; gap:6px; }
+.clean-state span { color:var(--muted); font-size:12px; }
+
+.section-suggestion { margin-top:8px; padding:12px; border:1px solid #303946; background:#0e1319; display:grid; gap:5px; }
+.section-suggestion strong { font-size:11px; color:var(--cyan); letter-spacing:.08em; }
+.section-suggestion span { color:#c4cbd4; font-size:12px; }
+
+.repair-plan { margin:12px 0 16px; }
+.plan-list { display:flex; flex-wrap:wrap; gap:8px; }
+.plan-list span { padding:7px 9px; background:#0e1712; border:1px solid #315440; color:#a9deb9; font-size:11px; }
+.preserve-line { margin-top:12px; padding:9px 11px; border:1px solid #26343c; color:var(--cyan); background:#0d1418; font-size:10px; letter-spacing:.06em; }
+.final-actions { display:flex; gap:8px; flex-wrap:wrap; }
+.button.download { text-decoration:none; display:inline-block; background:var(--ok); color:#0b120e; border-color:var(--ok); font-weight:850; }
+.post-check { margin-top:18px; border-top:1px solid var(--line); padding-top:14px; display:grid; gap:7px; }
+.post-title { display:flex; justify-content:space-between; gap:12px; margin-bottom:4px; }
+.post-title span { color:var(--muted); font-size:11px; }
+.post-row { display:grid; grid-template-columns:180px 1fr auto; gap:12px; padding:7px 0; border-bottom:1px solid #232932; align-items:baseline; }
+.post-row span { color:var(--muted); font-size:11px; }
+.post-row strong { font-size:12px; font-variant-numeric:tabular-nums; }
+.post-row small { color:var(--muted); font-size:10px; }
+.safety-note { margin-top:8px; padding:9px 11px; border:1px solid #594a30; color:#e9c77c; background:#16130d; font-size:11px; }
+
+@media (max-width: 760px) {
+  .issue-grid { grid-template-columns:1fr; }
+  .issue-head { flex-direction:column; }
+  .post-row { grid-template-columns:1fr; gap:3px; }
+}
+
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">JACKPOTØ31 / SUNO WAV TOOL</p>
+      <h1>【Suno用】WAV音源マスタリング前仕上げツール <span>v0.2.2</span></h1>
+      <p class="tagline">Sunoで生成したWAVの気になる部分を見つけ、確認しながらマスタリング前の状態に整えます。</p>
+    </div>
+    <div class="privacy-badge">PC内で処理<br><small>WAVは外部へ送信しません</small></div>
+  </header>
+
+  <main>
+    <section id="dropZone" class="drop-zone" aria-label="WAVファイルの読み込みエリア">
+      <input id="fileInput" type="file" accept="audio/wav,audio/x-wav,.wav" hidden />
+      <div class="drop-inner">
+        <div class="drop-icon">WAV</div>
+        <h2>SunoのWAV音源を読み込む</h2>
+        <p>曲頭のプツッ音、不要な超低域、濁り、刺さり、高域のチリつき・シュワシュワ感などを自動解析します。</p>
+        <label id="selectFileBtn" class="button primary" for="fileInput" role="button" tabindex="0">WAVを選択</label>
+        <p class="muted">解析・修正・書き出しはブラウザ内で完結します。ZIP展開後、index.htmlをダブルクリックするだけで使えます。</p>
+      </div>
+    </section>
+
+    <section id="workspace" class="workspace hidden">
+      <section class="card track-header">
+        <div>
+          <p class="section-label">読み込んだWAV</p>
+          <h2 id="trackName">-</h2>
+          <div id="trackMeta" class="track-meta"></div>
+        </div>
+        <div class="transport">
+          <button id="playBtn" class="button">▶ 再生</button>
+          <button id="stopBtn" class="button">■ 停止</button>
+          <button id="reanalyzeBtn" class="button">再解析</button>
+          <button id="newFileBtn" class="button ghost">別のWAV</button>
+        </div>
+      </section>
+
+      <section class="card progress-card">
+        <div class="progress-head">
+          <div>
+            <p class="section-label">処理状況</p>
+            <strong id="workflowText">WAVを解析しています…</strong>
+          </div>
+          <span id="analysisState" class="state-pill running">解析中</span>
+        </div>
+        <div class="progress-track"><div id="progressBar" class="progress-bar"></div></div>
+      </section>
+
+      <div class="main-grid">
+        <section class="card waveform-card">
+          <div class="card-heading">
+            <div>
+              <p class="section-label">波形</p>
+              <p id="timeReadout" class="time-readout">00:00.000 / 00:00.000</p>
+            </div>
+            <div class="region-tools">
+              <button id="markRegionBtn" class="button small">再生成区間を指定</button>
+              <button id="clearRegionBtn" class="button small ghost">区間解除</button>
+            </div>
+          </div>
+          <div class="wave-wrap">
+            <canvas id="waveCanvas" width="1200" height="360"></canvas>
+            <div id="selectionInfo" class="selection-info hidden"></div>
+          </div>
+          <div class="playback-tools">
+            <span>波形をクリック：再生位置移動</span>
+            <span>再生成区間指定中：ドラッグ選択</span>
+          </div>
+        </section>
+
+        <aside class="card results-card">
+          <div class="card-heading">
+            <div>
+              <p class="section-label">解析結果</p>
+              <h2>検出結果</h2>
+            </div>
+            <span id="issueCountPill" class="state-pill">修正候補 0件</span>
+          </div>
+          <div id="summaryList" class="summary-list"><p class="muted">解析中…</p></div>
+          <div class="preserve-box">
+            <strong>原音を優先</strong>
+            <span>パン / ステレオ幅 / リバーブ / ダイナミクス / LUFS は自動変更しません。</span>
+          </div>
+        </aside>
+      </div>
+
+      <section class="card repair-card">
+        <div class="card-heading">
+          <div>
+            <p class="section-label">修正候補</p>
+            <h2>修正候補を確認</h2>
+          </div>
+          <div class="approval-count"><strong id="approvedCount">0</strong> 件を修正予定</div>
+        </div>
+        <p class="muted intro-copy">問題の意味と修正方法を表示します。「修正前」と「修正後」を聴き比べて、使う修正だけ選んでください。</p>
+        <div id="issueList" class="issue-list"><p class="muted">解析完了後に修正候補が表示されます。</p></div>
+      </section>
+
+      <section class="card section-card">
+        <div class="card-heading">
+          <div>
+            <p class="section-label">再生成区間</p>
+            <h2>Open Editor 再生成区間</h2>
+          </div>
+          <span id="sectionState" class="state-pill">未指定</span>
+        </div>
+        <p class="muted">発音修正などで再生成した部分を波形上で指定すると、前後と比べて音量・低中域・中高域・高域・チリつきの差を調べ、なじませる修正案を追加します。左右の広がりは確認だけ行い、自動では変更しません。</p>
+        <div id="sectionReport" class="section-report"></div>
+      </section>
+
+      <section class="card final-card">
+        <div class="card-heading">
+          <div>
+            <p class="section-label">最終修正</p>
+            <h2>選んだ修正だけを一度に適用</h2>
+          </div>
+          <span id="renderState" class="state-pill preserve">未実行</span>
+        </div>
+        <div id="repairPlan" class="repair-plan"><p class="muted">使う修正を1件以上選ぶと実行できます。</p></div>
+        <div class="final-actions">
+          <button id="renderBtn" class="button primary" disabled>WAVを修正する</button>
+          <a id="downloadBtn" class="button download hidden" download>修正版WAVを保存</a>
+        </div>
+        <div id="postCheck" class="post-check hidden"></div>
+      </section>
+    </section>
+  </main>
+
+  <footer>
+    <p>【Suno用】WAV音源マスタリング前仕上げツール v0.2.2 — 原音優先 / PC内処理 / 非公式ツール</p>
+  </footer>
+  <script>
+window.__SPLC = window.__SPLC || {};
+
+/* ===== dsp.js ===== */
+(function(S){
+'use strict';
+const EPS = 1e-12;
+
+function clamp(v, lo, hi) {
+  return Math.min(hi, Math.max(lo, v));
+}
+
+function mean(values) {
+  if (!values.length) return 0;
+  let sum = 0;
+  for (const v of values) sum += v;
+  return sum / values.length;
+}
+
+function median(values) {
+  if (!values.length) return 0;
+  const a = Array.from(values).sort((x, y) => x - y);
+  const m = a.length >> 1;
+  return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
+}
+
+function percentile(values, p) {
+  if (!values.length) return 0;
+  const a = Array.from(values).sort((x, y) => x - y);
+  const idx = clamp((a.length - 1) * p, 0, a.length - 1);
+  const lo = Math.floor(idx);
+  const hi = Math.ceil(idx);
+  const t = idx - lo;
+  return a[lo] * (1 - t) + a[hi] * t;
+}
+
+function mad(values, center = null) {
+  if (!values.length) return 0;
+  const c = center ?? median(values);
+  const dev = new Array(values.length);
+  for (let i = 0; i < values.length; i++) dev[i] = Math.abs(values[i] - c);
+  return median(dev);
+}
+
+function rms(samples, start = 0, end = samples.length) {
+  start = Math.max(0, start | 0);
+  end = Math.min(samples.length, end | 0);
+  if (end <= start) return 0;
+  let sum = 0;
+  for (let i = start; i < end; i++) {
+    const x = samples[i];
+    sum += x * x;
+  }
+  return Math.sqrt(sum / (end - start));
+}
+
+function db20(x) {
+  return 20 * Math.log10(Math.max(EPS, x));
+}
+
+function db10(x) {
+  return 10 * Math.log10(Math.max(EPS, x));
+}
+
+function downmix(audioBuffer) {
+  const length = audioBuffer.length;
+  const ch = audioBuffer.numberOfChannels;
+  const mono = new Float32Array(length);
+  for (let c = 0; c < ch; c++) {
+    const data = audioBuffer.getChannelData(c);
+    for (let i = 0; i < length; i++) mono[i] += data[i] / ch;
+  }
+  return mono;
+}
+
+function hann(size) {
+  const w = new Float64Array(size);
+  for (let i = 0; i < size; i++) w[i] = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (size - 1));
+  return w;
+}
+
+function reverseBits(x, bits) {
+  let y = 0;
+  for (let i = 0; i < bits; i++) {
+    y = (y << 1) | (x & 1);
+    x >>>= 1;
+  }
+  return y;
+}
+
+function fftPowerReal(samples, window = null) {
+  const n = samples.length;
+  if ((n & (n - 1)) !== 0) throw new Error('FFT length must be power of two');
+  const levels = Math.log2(n) | 0;
+  const re = new Float64Array(n);
+  const im = new Float64Array(n);
+
+  for (let i = 0; i < n; i++) {
+    const j = reverseBits(i, levels);
+    re[j] = samples[i] * (window ? window[i] : 1);
+  }
+
+  for (let size = 2; size <= n; size <<= 1) {
+    const half = size >>> 1;
+    const step = -2 * Math.PI / size;
+    for (let start = 0; start < n; start += size) {
+      for (let j = 0; j < half; j++) {
+        const angle = step * j;
+        const wr = Math.cos(angle);
+        const wi = Math.sin(angle);
+        const even = start + j;
+        const odd = even + half;
+        const tr = wr * re[odd] - wi * im[odd];
+        const ti = wr * im[odd] + wi * re[odd];
+        re[odd] = re[even] - tr;
+        im[odd] = im[even] - ti;
+        re[even] += tr;
+        im[even] += ti;
+      }
+    }
+  }
+
+  const power = new Float64Array(n / 2 + 1);
+  const norm = 1 / (n * n);
+  for (let k = 0; k < power.length; k++) power[k] = (re[k] * re[k] + im[k] * im[k]) * norm;
+  return power;
+}
+
+function bandPower(power, sampleRate, fftSize, lowHz, highHz) {
+  const nyq = sampleRate / 2;
+  const lo = clamp(lowHz, 0, nyq);
+  const hi = clamp(highHz, lo, nyq);
+  const binHz = sampleRate / fftSize;
+  const start = Math.max(0, Math.ceil(lo / binHz));
+  const end = Math.min(power.length - 1, Math.floor(hi / binHz));
+  let sum = 0;
+  for (let k = start; k <= end; k++) sum += power[k];
+  return sum;
+}
+
+function spectralCentroid(power, sampleRate, fftSize) {
+  const binHz = sampleRate / fftSize;
+  let num = 0;
+  let den = 0;
+  for (let k = 1; k < power.length; k++) {
+    const p = power[k];
+    num += k * binHz * p;
+    den += p;
+  }
+  return den > EPS ? num / den : 0;
+}
+
+function spectralFlatness(power, sampleRate, fftSize, lowHz = 1000, highHz = 12000) {
+  const nyq = sampleRate / 2;
+  const lo = clamp(lowHz, 0, nyq);
+  const hi = clamp(highHz, lo, nyq);
+  const binHz = sampleRate / fftSize;
+  const start = Math.max(1, Math.ceil(lo / binHz));
+  const end = Math.min(power.length - 1, Math.floor(hi / binHz));
+  if (end < start) return 0;
+  let logSum = 0;
+  let arith = 0;
+  let count = 0;
+  for (let k = start; k <= end; k++) {
+    const p = Math.max(EPS, power[k]);
+    logSum += Math.log(p);
+    arith += p;
+    count++;
+  }
+  if (!count || arith <= EPS) return 0;
+  const geo = Math.exp(logSum / count);
+  return geo / (arith / count);
+}
+
+function robustZ(value, values) {
+  const m = median(values);
+  const d = mad(values, m);
+  return d > EPS ? 0.6745 * (value - m) / d : 0;
+}
+
+function formatTime(seconds) {
+  if (!Number.isFinite(seconds)) seconds = 0;
+  seconds = Math.max(0, seconds);
+  const min = Math.floor(seconds / 60);
+  const sec = Math.floor(seconds % 60);
+  const ms = Math.floor((seconds - Math.floor(seconds)) * 1000);
+  return `${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}.${String(ms).padStart(3, '0')}`;
+}
+
+function severityFromScore(score) {
+  if (score >= 75) return 'HIGH';
+  if (score >= 50) return 'MEDIUM';
+  if (score >= 25) return 'LOW';
+  return 'OK';
+}
+
+function parseWavMetadata(arrayBuffer) {
+  const view = new DataView(arrayBuffer);
+  const ascii = (offset, len) => {
+    let s = '';
+    for (let i = 0; i < len; i++) s += String.fromCharCode(view.getUint8(offset + i));
+    return s;
+  };
+  if (ascii(0, 4) !== 'RIFF' || ascii(8, 4) !== 'WAVE') return null;
+  let pos = 12;
+  let fmt = null;
+  while (pos + 8 <= view.byteLength) {
+    const id = ascii(pos, 4);
+    const size = view.getUint32(pos + 4, true);
+    if (id === 'fmt ' && size >= 16 && pos + 8 + size <= view.byteLength) {
+      fmt = {
+        audioFormat: view.getUint16(pos + 8, true),
+        channels: view.getUint16(pos + 10, true),
+        sampleRate: view.getUint32(pos + 12, true),
+        byteRate: view.getUint32(pos + 16, true),
+        blockAlign: view.getUint16(pos + 20, true),
+        bitDepth: view.getUint16(pos + 22, true),
+      };
+      break;
+    }
+    pos += 8 + size + (size % 2);
+  }
+  return fmt;
+}
+
+function stereoStats(audioBuffer, startSec, endSec) {
+  if (audioBuffer.numberOfChannels < 2) return { correlation: 1, width: 0, balanceDb: 0 };
+  const sr = audioBuffer.sampleRate;
+  const start = clamp(Math.floor(startSec * sr), 0, audioBuffer.length - 1);
+  const end = clamp(Math.ceil(endSec * sr), start + 1, audioBuffer.length);
+  const l = audioBuffer.getChannelData(0);
+  const r = audioBuffer.getChannelData(1);
+  let sumL2 = 0, sumR2 = 0, sumLR = 0, sumM2 = 0, sumS2 = 0;
+  for (let i = start; i < end; i++) {
+    const lv = l[i], rv = r[i];
+    sumL2 += lv * lv;
+    sumR2 += rv * rv;
+    sumLR += lv * rv;
+    const m = (lv + rv) * 0.5;
+    const s = (lv - rv) * 0.5;
+    sumM2 += m * m;
+    sumS2 += s * s;
+  }
+  const corr = sumLR / Math.sqrt(Math.max(EPS, sumL2 * sumR2));
+  const width = Math.sqrt(sumS2 / Math.max(EPS, sumM2));
+  const balanceDb = 10 * Math.log10(Math.max(EPS, sumL2) / Math.max(EPS, sumR2));
+  return { correlation: clamp(corr, -1, 1), width, balanceDb };
+}
+
+Object.assign(S, { clamp, mean, median, percentile, mad, rms, db20, db10, downmix, hann, fftPowerReal, bandPower, spectralCentroid, spectralFlatness, robustZ, formatTime, severityFromScore, parseWavMetadata, stereoStats });
+})(window.__SPLC);
+
+
+/* ===== analyzer.js ===== */
+(function(S){
+'use strict';
+const { clamp, mean, median, mad, percentile, rms, db20, db10, downmix, hann, fftPowerReal, bandPower, spectralCentroid, spectralFlatness, severityFromScore, stereoStats } = S;
+
+
+const EPS = 1e-12;
+const sleepFrame = () => new Promise(resolve => requestAnimationFrame(resolve));
+
+function makeEvent(type, time, score, confidence, detail = '', extra = {}) {
+  return {
+    id: `${type}-${time.toFixed(5)}-${Math.random().toString(36).slice(2, 7)}`,
+    type,
+    time,
+    score: clamp(score, 0, 100),
+    severity: severityFromScore(score),
+    confidence: clamp(confidence, 0, 100),
+    detail,
+    ...extra,
+  };
+}
+
+function peakStats(audioBuffer) {
+  let peak = 0;
+  let clippingSamples = 0;
+  const dc = [];
+  for (let c = 0; c < audioBuffer.numberOfChannels; c++) {
+    const data = audioBuffer.getChannelData(c);
+    let sum = 0;
+    for (let i = 0; i < data.length; i++) {
+      const a = Math.abs(data[i]);
+      if (a > peak) peak = a;
+      if (a >= 0.9999) clippingSamples++;
+      sum += data[i];
+    }
+    dc.push(sum / data.length);
+  }
+  return { peak, peakDb: db20(peak), clippingSamples, dc };
+}
+
+function detectStartArtifact(mono, sampleRate) {
+  const searchEnd = Math.min(mono.length, Math.floor(sampleRate * 0.1));
+  const priorityEnd = Math.min(searchEnd, Math.floor(sampleRate * 0.025));
+  if (priorityEnd < 8) return null;
+
+  const baselineStart = Math.min(searchEnd - 2, Math.floor(sampleRate * 0.02));
+  const baseline = [];
+  for (let i = Math.max(2, baselineStart); i < searchEnd; i += 2) {
+    baseline.push(Math.abs(mono[i] - 2 * mono[i - 1] + mono[i - 2]));
+  }
+  const baseP99 = Math.max(1e-5, percentile(baseline, 0.99));
+  const baseMed = Math.max(1e-6, median(baseline));
+
+  let maxSecond = 0;
+  let maxIdx = 2;
+  for (let i = 2; i < priorityEnd; i++) {
+    const s2 = Math.abs(mono[i] - 2 * mono[i - 1] + mono[i - 2]);
+    if (s2 > maxSecond) { maxSecond = s2; maxIdx = i; }
+  }
+
+  const ratio = maxSecond / Math.max(baseP99, baseMed * 6);
+  const absolute = maxSecond;
+  const earlyBonus = maxIdx < sampleRate * 0.008 ? 1.2 : 1;
+  const score = clamp((ratio - 1) * 28 * earlyBonus + (absolute > 0.08 ? 18 : 0), 0, 100);
+  if (score < 35 || absolute < 0.018) return null;
+
+  const localThreshold = Math.max(baseP99 * 1.4, maxSecond * 0.12);
+  let artifactEnd = maxIdx + 1;
+  const maxTail = Math.min(searchEnd, maxIdx + Math.floor(sampleRate * 0.015));
+  let quietRun = 0;
+  const quietNeeded = Math.max(4, Math.floor(sampleRate * 0.0007));
+  for (let i = maxIdx + 2; i < maxTail; i++) {
+    const s2 = Math.abs(mono[i] - 2 * mono[i - 1] + mono[i - 2]);
+    if (s2 < localThreshold) quietRun++; else quietRun = 0;
+    if (quietRun >= quietNeeded) { artifactEnd = i - quietRun + 1; break; }
+  }
+
+  const confidence = clamp(45 + (ratio - 1) * 22 + (maxIdx < sampleRate * 0.01 ? 18 : 0), 0, 98);
+  return makeEvent(
+    'start',
+    maxIdx / sampleRate,
+    score,
+    confidence,
+    `先頭 ${(artifactEnd / sampleRate * 1000).toFixed(1)} ms 付近に孤立した瞬間ノイズ候補`,
+    { startSec: 0, endSec: artifactEnd / sampleRate, suggestedTrimMs: artifactEnd / sampleRate * 1000 }
+  );
+}
+
+
+function detectEndArtifact(mono, sampleRate) {
+  const searchStart = Math.max(2, mono.length - Math.floor(sampleRate * 0.12));
+  if (mono.length - searchStart < 8) return null;
+  const diffs = [];
+  let maxSecond = 0;
+  let maxIdx = searchStart;
+  for (let i = searchStart; i < mono.length; i++) {
+    const s2 = Math.abs(mono[i] - 2 * mono[i - 1] + mono[i - 2]);
+    diffs.push(s2);
+    if (s2 > maxSecond) { maxSecond = s2; maxIdx = i; }
+  }
+  const p99 = Math.max(1e-5, percentile(diffs, 0.99));
+  const med = Math.max(1e-6, median(diffs));
+  const ratio = maxSecond / Math.max(p99, med * 6);
+  const tailRms = rms(mono, Math.max(0, maxIdx - Math.floor(sampleRate * 0.025)), Math.min(mono.length, maxIdx + Math.floor(sampleRate * 0.025)));
+  const score = clamp((ratio - 1) * 26 + (maxSecond > 0.08 ? 18 : 0) + (tailRms < 0.03 ? 10 : 0), 0, 100);
+  if (score < 40 || maxSecond < 0.02) return null;
+  const confidence = clamp(42 + (ratio - 1) * 20 + (maxIdx > mono.length - sampleRate * 0.025 ? 18 : 0), 0, 96);
+  return makeEvent('end', maxIdx / sampleRate, score, confidence, '曲末付近の孤立した瞬間ノイズ候補');
+}
+
+function estimateClickThreshold(mono) {
+  const sample = [];
+  const stride = Math.max(32, Math.floor(mono.length / 120000));
+  for (let i = 2; i < mono.length; i += stride) {
+    sample.push(Math.abs(mono[i] - 2 * mono[i - 1] + mono[i - 2]));
+  }
+  const p999 = percentile(sample, 0.999);
+  const med = median(sample);
+  return Math.max(0.025, p999 * 3.0, med * 35);
+}
+
+function detectClicks(mono, sampleRate, maxEvents = 14) {
+  const threshold = estimateClickThreshold(mono);
+  const raw = [];
+  const skipStart = Math.floor(sampleRate * 0.05);
+  const minGap = Math.floor(sampleRate * 0.018);
+  let lastIdx = -minGap;
+
+  for (let i = Math.max(6, skipStart); i < mono.length - 6; i++) {
+    const center = Math.abs(mono[i] - 2 * mono[i - 1] + mono[i - 2]);
+    if (center < threshold) continue;
+
+    let neighbor = 0;
+    let count = 0;
+    for (let k = -5; k <= 5; k++) {
+      if (k === 0) continue;
+      const j = i + k;
+      const v = Math.abs(mono[j] - 2 * mono[j - 1] + mono[j - 2]);
+      neighbor += v;
+      count++;
+    }
+    neighbor /= count;
+    const isolation = center / Math.max(1e-6, neighbor);
+    if (isolation < 5.5) continue;
+    if (i - lastIdx < minGap) {
+      if (raw.length && center > raw[raw.length - 1].center) {
+        raw.pop();
+      } else {
+        continue;
+      }
+    }
+
+    const score = clamp(48 + 12 * Math.log2(Math.max(1, center / threshold)) + 8 * Math.log2(Math.max(1, isolation / 5.5)), 0, 100);
+    const confidence = clamp(55 + (isolation - 5.5) * 5 + (center / threshold - 1) * 12, 0, 97);
+    raw.push({ i, center, isolation, score, confidence });
+    lastIdx = i;
+  }
+
+  raw.sort((a, b) => b.score - a.score);
+  return raw.slice(0, maxEvents).map(x => makeEvent(
+    'click', x.i / sampleRate, x.score, x.confidence,
+    `極短い孤立波形ジャンプ / isolation ${x.isolation.toFixed(1)}×`
+  )).sort((a, b) => a.time - b.time);
+}
+
+async function extractFeatures(mono, sampleRate, onProgress = null) {
+  const frameSize = 2048;
+  const hop = 4096;
+  const window = hann(frameSize);
+  const frame = new Float64Array(frameSize);
+  const features = [];
+  const totalFrames = Math.max(0, Math.floor((mono.length - frameSize) / hop) + 1);
+
+  for (let fi = 0, start = 0; start + frameSize <= mono.length; fi++, start += hop) {
+    let sumSq = 0;
+    for (let i = 0; i < frameSize; i++) {
+      const v = mono[start + i];
+      frame[i] = v;
+      sumSq += v * v;
+    }
+    const frameRms = Math.sqrt(sumSq / frameSize);
+    const power = fftPowerReal(frame, window);
+    const total = bandPower(power, sampleRate, frameSize, 30, Math.min(16000, sampleRate / 2));
+    const sub = bandPower(power, sampleRate, frameSize, 0, 30);
+    const low = bandPower(power, sampleRate, frameSize, 30, 150);
+    const lowMid = bandPower(power, sampleRate, frameSize, 150, 500);
+    const body = bandPower(power, sampleRate, frameSize, 500, 2000);
+    const p2_4 = bandPower(power, sampleRate, frameSize, 2000, 4000);
+    const p4_6 = bandPower(power, sampleRate, frameSize, 4000, 6000);
+    const p6_10 = bandPower(power, sampleRate, frameSize, 6000, 10000);
+    const high = bandPower(power, sampleRate, frameSize, 6000, 12000);
+    const highMid = p2_4 + p4_6;
+    const centroid = spectralCentroid(power, sampleRate, frameSize);
+    const flatness = spectralFlatness(power, sampleRate, frameSize, 5000, 12000);
+
+    features.push({
+      time: (start + frameSize / 2) / sampleRate,
+      rms: frameRms,
+      total, sub, low, lowMid, body, highMid, high,
+      p2_4, p4_6, p6_10,
+      centroid, flatness,
+      harshRatio: (p4_6 + p6_10) / Math.max(EPS, total),
+      fizzMetric: (high / Math.max(EPS, total)) * (0.35 + flatness),
+    });
+
+    if (fi % 180 === 0) {
+      onProgress?.(0.28 + 0.52 * (fi / Math.max(1, totalFrames)), '周波数バランスを解析中');
+      await sleepFrame();
+    }
+  }
+  return { features, frameSize, hop };
+}
+
+function detectPercussiveHarshness(mono, sampleRate, features, maxEvents = 16) {
+  const blockSize = 256;
+  const blockCount = Math.floor(mono.length / blockSize);
+  if (blockCount < 20) return [];
+
+  const blockRms = new Float64Array(blockCount);
+  const hfProxy = new Float64Array(blockCount);
+  const proxySample = [];
+
+  for (let b = 0; b < blockCount; b++) {
+    const start = b * blockSize;
+    let sumSq = 0;
+    let diffSq = 0;
+    let prev = mono[start];
+    for (let i = 0; i < blockSize; i++) {
+      const v = mono[start + i];
+      sumSq += v * v;
+      if (i) {
+        const d = v - prev;
+        diffSq += d * d;
+      }
+      prev = v;
+    }
+    const r = Math.sqrt(sumSq / blockSize);
+    const d = Math.sqrt(diffSq / Math.max(1, blockSize - 1));
+    blockRms[b] = r;
+    hfProxy[b] = d / Math.max(1e-5, r);
+    if (b % 7 === 0 && r > 0.001) proxySample.push(hfProxy[b]);
+  }
+
+  const proxyMed = median(proxySample);
+  const proxyScale = Math.max(1e-4, mad(proxySample, proxyMed) * 1.4826);
+  const globalHarsh = features.filter(f => f.rms > 0.001).map(f => f.harshRatio);
+  const harshMed = median(globalHarsh);
+  const harshScale = Math.max(1e-5, mad(globalHarsh, harshMed) * 1.4826);
+  const fftSize = 1024;
+  const window = hann(fftSize);
+  const frame = new Float64Array(fftSize);
+  const candidates = [];
+
+  for (let b = 7; b < blockCount - 3; b++) {
+    let prevMean = 0;
+    for (let k = 1; k <= 6; k++) prevMean += blockRms[b - k];
+    prevMean /= 6;
+    const onset = blockRms[b] / Math.max(1e-5, prevMean);
+    const proxyZ = (hfProxy[b] - proxyMed) / proxyScale;
+    if (onset < 1.45 || proxyZ < 2.0 || blockRms[b] < 0.003) continue;
+    if (blockRms[b] < blockRms[b - 1] || blockRms[b] < blockRms[b + 1]) continue;
+
+    const center = b * blockSize + (blockSize >> 1);
+    const frameStart = Math.max(0, Math.min(mono.length - fftSize, center - (fftSize >> 1)));
+    for (let i = 0; i < fftSize; i++) frame[i] = mono[frameStart + i];
+    const power = fftPowerReal(frame, window);
+    const total = bandPower(power, sampleRate, fftSize, 80, Math.min(12000, sampleRate / 2));
+    const p2_4 = bandPower(power, sampleRate, fftSize, 2000, 4000);
+    const p4_6 = bandPower(power, sampleRate, fftSize, 4000, 6000);
+    const p6_10 = bandPower(power, sampleRate, fftSize, 6000, 10000);
+    const harshRatio = (p4_6 + p6_10) / Math.max(EPS, total);
+    const harshZ = (harshRatio - harshMed) / harshScale;
+    if (harshZ < 1.7) continue;
+
+    const dominantBands = [
+      ['2–4 kHz', p2_4],
+      ['4–6 kHz', p4_6],
+      ['6–10 kHz', p6_10],
+    ].sort((a, b) => b[1] - a[1]);
+    const score = clamp(35 + (onset - 1.45) * 18 + proxyZ * 6 + harshZ * 7, 0, 100);
+    const confidence = clamp(43 + proxyZ * 7 + harshZ * 8 + (onset - 1.45) * 15, 0, 97);
+    candidates.push(makeEvent(
+      'percussive', center / sampleRate, score, confidence,
+      `瞬間的な高域突出 / 主帯域 ${dominantBands[0][0]} / onset ${onset.toFixed(2)}×`,
+      { focusBand: dominantBands[0][0], relativeZ: harshZ }
+    ));
+  }
+
+  candidates.sort((a, b) => b.score - a.score);
+  const selected = [];
+  for (const e of candidates) {
+    if (selected.some(s => Math.abs(s.time - e.time) < 0.10)) continue;
+    selected.push(e);
+    if (selected.length >= maxEvents) break;
+  }
+  return selected.sort((a, b) => a.time - b.time);
+}
+
+function prefixFeature(features, getter) {
+  const out = new Float64Array(features.length + 1);
+  for (let i = 0; i < features.length; i++) out[i + 1] = out[i] + getter(features[i]);
+  return out;
+}
+
+function rangeMean(prefix, a, b) {
+  return (prefix[b] - prefix[a]) / Math.max(1, b - a);
+}
+
+function detectChangePoints(features, maxEvents = 10) {
+  const n = features.length;
+  if (n < 30) return [];
+  const keys = [
+    f => Math.log10(f.rms + 1e-6),
+    f => Math.log10(f.low + EPS),
+    f => Math.log10(f.lowMid + EPS),
+    f => Math.log10(f.highMid + EPS),
+    f => Math.log10(f.high + EPS),
+    f => Math.log10(f.centroid + 10),
+    f => f.flatness,
+  ];
+  const pref = keys.map(k => prefixFeature(features, k));
+  const globalMeans = keys.map((k, ki) => rangeMean(pref[ki], 0, n));
+  const globalStd = keys.map((k, ki) => {
+    let ss = 0;
+    for (let i = 0; i < n; i++) {
+      const d = k(features[i]) - globalMeans[ki];
+      ss += d * d;
+    }
+    return Math.sqrt(ss / n) + 1e-5;
+  });
+
+  const frameDt = n > 1 ? features[1].time - features[0].time : 0.1;
+  const w = Math.max(5, Math.round(1.2 / frameDt));
+  const gap = Math.max(1, Math.round(0.18 / frameDt));
+  const scored = [];
+
+  for (let i = w + gap; i < n - w - gap; i++) {
+    let sumSq = 0;
+    const changes = [];
+    for (let k = 0; k < pref.length; k++) {
+      const l = rangeMean(pref[k], i - gap - w, i - gap);
+      const r = rangeMean(pref[k], i + gap, i + gap + w);
+      const d = Math.abs(r - l) / globalStd[k];
+      changes.push(d);
+      sumSq += d * d;
+    }
+    const score = Math.sqrt(sumSq / changes.length);
+    scored.push({ i, score, changes });
+  }
+
+  const dist = scored.map(s => s.score);
+  const threshold = Math.max(percentile(dist, 0.94), median(dist) + 2.7 * mad(dist));
+  const peaks = scored.filter((s, idx) => {
+    if (s.score < threshold) return false;
+    const prev = idx > 0 ? scored[idx - 1].score : -Infinity;
+    const next = idx + 1 < scored.length ? scored[idx + 1].score : -Infinity;
+    return s.score >= prev && s.score >= next;
+  }).sort((a, b) => b.score - a.score);
+
+  const selected = [];
+  for (const p of peaks) {
+    const time = features[p.i].time;
+    if (selected.some(x => Math.abs(x.time - time) < 1.5)) continue;
+    const strongest = p.changes
+      .map((v, i) => ({ v, name: ['Level', 'Low', 'Low-Mid', 'High-Mid', 'High', 'Centroid', 'Flatness'][i] }))
+      .sort((a, b) => b.v - a.v)
+      .slice(0, 2)
+      .map(x => x.name)
+      .join(' + ');
+    const normalized = clamp(45 + (p.score - threshold) * 20 + p.score * 8, 0, 100);
+    selected.push(makeEvent('change', time, normalized, clamp(45 + p.score * 16, 0, 94), `音響特性の急変候補 / ${strongest}`));
+    if (selected.length >= maxEvents) break;
+  }
+  return selected.sort((a, b) => a.time - b.time);
+}
+
+function bandProfile(features) {
+  if (!features.length) return null;
+  const active = features.filter(f => f.rms > 0.001);
+  const fs = active.length ? active : features;
+  const avg = key => mean(fs.map(f => f[key]));
+  const total = avg('total') + EPS;
+  const subRatio = avg('sub') / total;
+  const mudRatio = avg('lowMid') / total;
+  const harshRatio = avg('highMid') / total;
+  const fizz = mean(fs.map(f => f.fizzMetric));
+
+  // Conservative heuristics: these are review priorities, not “quality scores”.
+  const subScore = clamp((subRatio - 0.006) * 2600, 0, 100);
+  const mudScore = clamp((mudRatio - 0.24) * 220, 0, 100);
+  const harshScore = clamp((harshRatio - 0.16) * 300, 0, 100);
+  const fizzScore = clamp((fizz - 0.055) * 700, 0, 100);
+  return {
+    sub: { score: subScore, severity: severityFromScore(subScore), ratio: subRatio },
+    mud: { score: mudScore, severity: severityFromScore(mudScore), ratio: mudRatio },
+    harsh: { score: harshScore, severity: severityFromScore(harshScore), ratio: harshRatio },
+    fizz: { score: fizzScore, severity: severityFromScore(fizzScore), ratio: fizz },
+  };
+}
+
+async function analyzeAudio(audioBuffer, onProgress = null) {
+  onProgress?.(0.03, '波形を準備中');
+  const mono = downmix(audioBuffer);
+  await sleepFrame();
+
+  onProgress?.(0.08, '曲頭ノイズとプツッ音を解析中');
+  const startEvent = detectStartArtifact(mono, audioBuffer.sampleRate);
+  const endEvent = detectEndArtifact(mono, audioBuffer.sampleRate);
+  const clickEvents = detectClicks(mono, audioBuffer.sampleRate);
+  await sleepFrame();
+
+  onProgress?.(0.20, 'ピークと波形の中心ズレを解析中');
+  const peaks = peakStats(audioBuffer);
+  const featureResult = await extractFeatures(mono, audioBuffer.sampleRate, onProgress);
+  const { features } = featureResult;
+
+  onProgress?.(0.83, '打楽器の高域の刺さりを解析中');
+  const percussiveEvents = detectPercussiveHarshness(mono, audioBuffer.sampleRate, features);
+  await sleepFrame();
+
+  onProgress?.(0.90, '音質の変化点を解析中');
+  const changeEvents = detectChangePoints(features);
+  const profile = bandProfile(features);
+  const stereo = stereoStats(audioBuffer, 0, audioBuffer.duration);
+
+  const events = [
+    ...(startEvent ? [startEvent] : []),
+    ...(endEvent ? [endEvent] : []),
+    ...clickEvents,
+    ...percussiveEvents,
+    ...changeEvents,
+  ].sort((a, b) => a.time - b.time);
+
+  const dcMax = Math.max(...peaks.dc.map(Math.abs));
+  const dcScore = clamp((dcMax - 0.0005) * 16000, 0, 100);
+  const clipScore = peaks.clippingSamples > 0 ? clamp(45 + Math.log10(peaks.clippingSamples + 1) * 25, 0, 100) : 0;
+  const stereoScore = stereo.correlation < -0.15 ? clamp(50 + (-0.15 - stereo.correlation) * 70, 0, 100) : 0;
+
+  const summary = {
+    start: startEvent ? { severity: startEvent.severity, count: 1, score: startEvent.score } : { severity: 'OK', count: 0, score: 0 },
+    end: endEvent ? { severity: endEvent.severity, count: 1, score: endEvent.score } : { severity: 'OK', count: 0, score: 0 },
+    click: clickEvents.length ? { severity: severityFromScore(Math.max(...clickEvents.map(e => e.score))), count: clickEvents.length, score: Math.max(...clickEvents.map(e => e.score)) } : { severity: 'OK', count: 0, score: 0 },
+    clipping: { severity: severityFromScore(clipScore), count: peaks.clippingSamples, score: clipScore, peakDb: peaks.peakDb },
+    dc: { severity: severityFromScore(dcScore), score: dcScore, max: dcMax },
+    subsonic: profile?.sub ?? { severity: 'OK', score: 0 },
+    mud: profile?.mud ?? { severity: 'OK', score: 0 },
+    harshness: profile?.harsh ?? { severity: 'OK', score: 0 },
+    fizz: profile?.fizz ?? { severity: 'OK', score: 0 },
+    percussive: percussiveEvents.length ? { severity: severityFromScore(Math.max(...percussiveEvents.map(e => e.score))), count: percussiveEvents.length, score: Math.max(...percussiveEvents.map(e => e.score)) } : { severity: 'OK', count: 0, score: 0 },
+    stereo: { severity: severityFromScore(stereoScore), score: stereoScore, correlation: stereo.correlation, width: stereo.width },
+    change: changeEvents.length ? { severity: severityFromScore(Math.max(...changeEvents.map(e => e.score))), count: changeEvents.length, score: Math.max(...changeEvents.map(e => e.score)) } : { severity: 'OK', count: 0, score: 0 },
+  };
+
+  onProgress?.(1, '解析完了');
+  return { mono, features, events, summary, peaks, stereo, featureResult };
+}
+
+function aggregateFeatures(features, startSec, endSec) {
+  const slice = features.filter(f => f.time >= startSec && f.time <= endSec);
+  if (!slice.length) return null;
+  const avg = key => mean(slice.map(f => f[key]));
+  return {
+    count: slice.length,
+    rms: avg('rms'),
+    total: avg('total'),
+    low: avg('low'),
+    lowMid: avg('lowMid'),
+    highMid: avg('highMid'),
+    high: avg('high'),
+    fizzMetric: avg('fizzMetric'),
+    centroid: avg('centroid'),
+    flatness: avg('flatness'),
+  };
+}
+
+function diffDb(section, ref, field, power = true) {
+  const a = Math.max(EPS, section[field]);
+  const b = Math.max(EPS, ref[field]);
+  return (power ? 10 : 20) * Math.log10(a / b);
+}
+
+function analyzeSection(audioBuffer, analysis, startSec, endSec) {
+  const duration = endSec - startSec;
+  if (!analysis?.features?.length || duration < 0.1) return null;
+  const refLen = clamp(duration, 1.5, 8);
+  const gap = 0.15;
+  const beforeStart = Math.max(0, startSec - gap - refLen);
+  const beforeEnd = Math.max(0, startSec - gap);
+  const afterStart = Math.min(audioBuffer.duration, endSec + gap);
+  const afterEnd = Math.min(audioBuffer.duration, endSec + gap + refLen);
+
+  const section = aggregateFeatures(analysis.features, startSec, endSec);
+  const before = beforeEnd - beforeStart > 0.5 ? aggregateFeatures(analysis.features, beforeStart, beforeEnd) : null;
+  const after = afterEnd - afterStart > 0.5 ? aggregateFeatures(analysis.features, afterStart, afterEnd) : null;
+  if (!section || (!before && !after)) return null;
+
+  const refs = [before, after].filter(Boolean);
+  const ref = {};
+  for (const key of ['rms', 'total', 'low', 'lowMid', 'highMid', 'high', 'fizzMetric', 'centroid', 'flatness']) {
+    ref[key] = mean(refs.map(x => x[key]));
+  }
+
+  let confidence = 62;
+  if (before && after) {
+    const fields = ['low', 'lowMid', 'highMid', 'high'];
+    const refDisagreement = mean(fields.map(k => Math.abs(10 * Math.log10((before[k] + EPS) / (after[k] + EPS)))));
+    const levelDisagreement = Math.abs(20 * Math.log10((before.rms + EPS) / (after.rms + EPS)));
+    confidence = clamp(96 - refDisagreement * 11 - levelDisagreement * 7, 25, 96);
+  }
+
+  const secStereo = stereoStats(audioBuffer, startSec, endSec);
+  const refStereoParts = [];
+  if (before) refStereoParts.push(stereoStats(audioBuffer, beforeStart, beforeEnd));
+  if (after) refStereoParts.push(stereoStats(audioBuffer, afterStart, afterEnd));
+  const refStereo = {
+    correlation: mean(refStereoParts.map(x => x.correlation)),
+    width: mean(refStereoParts.map(x => x.width)),
+    balanceDb: mean(refStereoParts.map(x => x.balanceDb)),
+  };
+
+  return {
+    startSec, endSec, confidence,
+    references: { beforeStart, beforeEnd, afterStart, afterEnd },
+    levelDb: diffDb(section, ref, 'rms', false),
+    lowDb: diffDb(section, ref, 'low'),
+    lowMidDb: diffDb(section, ref, 'lowMid'),
+    highMidDb: diffDb(section, ref, 'highMid'),
+    highDb: diffDb(section, ref, 'high'),
+    fizzPercent: ((section.fizzMetric / Math.max(EPS, ref.fizzMetric)) - 1) * 100,
+    centroidHz: section.centroid - ref.centroid,
+    stereoWidthPercent: ((secStereo.width / Math.max(0.01, refStereo.width)) - 1) * 100,
+    correlationDelta: secStereo.correlation - refStereo.correlation,
+    balanceDeltaDb: secStereo.balanceDb - refStereo.balanceDb,
+  };
+}
+
+Object.assign(S, { analyzeAudio, analyzeSection });
+})(window.__SPLC);
+
+
+/* ===== repair.js ===== */
+(function(S){
+'use strict';
+const { clamp } = S;
+
+
+const EPS = 1e-12;
+
+function dbToGain(db) { return Math.pow(10, db / 20); }
+
+function rbjCoeffs(type, sampleRate, freq, Q = 0.707, gainDb = 0) {
+  const nyq = sampleRate / 2;
+  freq = clamp(freq, 5, nyq * 0.95);
+  const w0 = 2 * Math.PI * freq / sampleRate;
+  const cos = Math.cos(w0);
+  const sin = Math.sin(w0);
+  const A = Math.pow(10, gainDb / 40);
+  let b0, b1, b2, a0, a1, a2;
+
+  if (type === 'highpass') {
+    const alpha = sin / (2 * Q);
+    b0 = (1 + cos) / 2;
+    b1 = -(1 + cos);
+    b2 = (1 + cos) / 2;
+    a0 = 1 + alpha;
+    a1 = -2 * cos;
+    a2 = 1 - alpha;
+  } else if (type === 'peaking') {
+    const alpha = sin / (2 * Q);
+    b0 = 1 + alpha * A;
+    b1 = -2 * cos;
+    b2 = 1 - alpha * A;
+    a0 = 1 + alpha / A;
+    a1 = -2 * cos;
+    a2 = 1 - alpha / A;
+  } else if (type === 'highshelf') {
+    const S = 1;
+    const alpha = sin / 2 * Math.sqrt((A + 1 / A) * (1 / S - 1) + 2);
+    const twoSqrtAAlpha = 2 * Math.sqrt(A) * alpha;
+    b0 = A * ((A + 1) + (A - 1) * cos + twoSqrtAAlpha);
+    b1 = -2 * A * ((A - 1) + (A + 1) * cos);
+    b2 = A * ((A + 1) + (A - 1) * cos - twoSqrtAAlpha);
+    a0 = (A + 1) - (A - 1) * cos + twoSqrtAAlpha;
+    a1 = 2 * ((A - 1) - (A + 1) * cos);
+    a2 = (A + 1) - (A - 1) * cos - twoSqrtAAlpha;
+  } else {
+    throw new Error(`Unknown biquad type: ${type}`);
+  }
+
+  return { b0: b0/a0, b1: b1/a0, b2: b2/a0, a1: a1/a0, a2: a2/a0 };
+}
+
+function filterArray(data, coeffs) {
+  const out = new Float32Array(data.length);
+  let x1 = 0, x2 = 0, y1 = 0, y2 = 0;
+  const { b0,b1,b2,a1,a2 } = coeffs;
+  for (let i = 0; i < data.length; i++) {
+    const x = data[i];
+    const y = b0*x + b1*x1 + b2*x2 - a1*y1 - a2*y2;
+    out[i] = y;
+    x2 = x1; x1 = x; y2 = y1; y1 = y;
+  }
+  return out;
+}
+
+function applyGlobalFilter(channels, coeffs) {
+  for (let c = 0; c < channels.length; c++) channels[c] = filterArray(channels[c], coeffs);
+}
+
+function equalPowerWindow(pos, start, end, ramp) {
+  if (pos < start || pos >= end) return 0;
+  if (ramp <= 0) return 1;
+  if (pos < start + ramp) {
+    const t = (pos - start) / ramp;
+    return 0.5 - 0.5 * Math.cos(Math.PI * clamp(t, 0, 1));
+  }
+  if (pos > end - ramp) {
+    const t = (end - pos) / ramp;
+    return 0.5 - 0.5 * Math.cos(Math.PI * clamp(t, 0, 1));
+  }
+  return 1;
+}
+
+function applyLocalFilter(channels, sampleRate, startSec, endSec, coeffs, rampSec = 0.02) {
+  const len = channels[0].length;
+  const start = clamp(Math.floor(startSec * sampleRate), 0, len);
+  const end = clamp(Math.ceil(endSec * sampleRate), start, len);
+  if (end <= start) return;
+  const pad = Math.floor(sampleRate * 0.08);
+  const procStart = Math.max(0, start - pad);
+  const procEnd = Math.min(len, end + pad);
+  const ramp = Math.max(1, Math.floor(rampSec * sampleRate));
+
+  for (let c = 0; c < channels.length; c++) {
+    const original = channels[c];
+    const segment = original.slice(procStart, procEnd);
+    const filtered = filterArray(segment, coeffs);
+    for (let i = start; i < end; i++) {
+      const wet = equalPowerWindow(i, start, end, ramp);
+      const fi = i - procStart;
+      original[i] = original[i] * (1 - wet) + filtered[fi] * wet;
+    }
+  }
+}
+
+function applyLocalGain(channels, sampleRate, startSec, endSec, gainDb, rampSec = 0.03) {
+  const gain = dbToGain(gainDb);
+  const len = channels[0].length;
+  const start = clamp(Math.floor(startSec * sampleRate), 0, len);
+  const end = clamp(Math.ceil(endSec * sampleRate), start, len);
+  const ramp = Math.max(1, Math.floor(rampSec * sampleRate));
+  for (const ch of channels) {
+    for (let i = start; i < end; i++) {
+      const wet = equalPowerWindow(i, start, end, ramp);
+      ch[i] *= 1 + (gain - 1) * wet;
+    }
+  }
+}
+
+function removeDc(channels) {
+  for (const ch of channels) {
+    let sum = 0;
+    for (let i = 0; i < ch.length; i++) sum += ch[i];
+    const dc = sum / Math.max(1, ch.length);
+    for (let i = 0; i < ch.length; i++) ch[i] -= dc;
+  }
+}
+
+function repairClick(channels, sampleRate, timeSec, widthMs = 0.65) {
+  const center = Math.round(timeSec * sampleRate);
+  const half = Math.max(2, Math.round(sampleRate * widthMs / 1000));
+  for (const ch of channels) {
+    const a = clamp(center - half, 1, ch.length - 2);
+    const b = clamp(center + half, a + 1, ch.length - 1);
+    const left = ch[a - 1];
+    const right = ch[b];
+    const span = b - a + 1;
+    for (let i = 0; i < span; i++) {
+      const t = (i + 1) / (span + 1);
+      ch[a + i] = left * (1 - t) + right * t;
+    }
+  }
+}
+
+function maxPeak(channels) {
+  let peak = 0;
+  for (const ch of channels) for (let i = 0; i < ch.length; i++) peak = Math.max(peak, Math.abs(ch[i]));
+  return peak;
+}
+
+function applySafetyGain(channels, baselinePeak = 0, targetPeak = 0.966) {
+  const peak = maxPeak(channels);
+  const newlyRaised = peak > Math.max(0.9995, baselinePeak + 1e-5);
+  if (!newlyRaised) return { applied: false, gainDb: 0, beforePeak: peak, afterPeak: peak };
+  const safeTarget = baselinePeak > 0.999 ? 0.999 : targetPeak;
+  const gain = safeTarget / peak;
+  for (const ch of channels) for (let i = 0; i < ch.length; i++) ch[i] *= gain;
+  return { applied: true, gainDb: 20 * Math.log10(gain), beforePeak: peak, afterPeak: peak * gain };
+}
+
+function makeInitialChannels(audioBuffer, trimStartSec = 0, trimEndSec = audioBuffer.duration) {
+  const sr = audioBuffer.sampleRate;
+  const start = clamp(Math.floor(trimStartSec * sr), 0, audioBuffer.length - 1);
+  const end = clamp(Math.ceil(trimEndSec * sr), start + 1, audioBuffer.length);
+  const channels = [];
+  for (let c = 0; c < audioBuffer.numberOfChannels; c++) {
+    channels.push(audioBuffer.getChannelData(c).slice(start, end));
+  }
+  return { channels, sampleRate: sr, trimStartSec: start / sr, trimEndSec: end / sr };
+}
+
+function scoreReduction(score, min = 0.45, max = 1.6) {
+  return min + (max - min) * clamp((score - 20) / 80, 0, 1);
+}
+
+function buildOperationFromIssue(issue) {
+  return issue?.operation ? structuredClone(issue.operation) : null;
+}
+
+function renderRepairs(audioBuffer, operations, { safetyGain = true } = {}) {
+  operations = (operations || []).filter(Boolean);
+  const trimStart = operations.find(x => x.type === 'trimStart')?.trimSec || 0;
+  const trimEnd = operations.find(x => x.type === 'trimEnd')?.endSec ?? audioBuffer.duration;
+  const state = makeInitialChannels(audioBuffer, trimStart, trimEnd);
+  let { channels, sampleRate } = state;
+  const shift = state.trimStartSec;
+  const baselinePeak = maxPeak(channels);
+  const report = [];
+
+  const rest = operations.filter(x => !['trimStart','trimEnd'].includes(x.type));
+
+  for (const op of rest) {
+    if (op.type === 'dc') {
+      removeDc(channels);
+      report.push('DC Offset correction');
+    }
+    if (op.type === 'clicks') {
+      for (const e of op.events || []) repairClick(channels, sampleRate, e.time - shift, e.widthMs || 0.65);
+      report.push(`プツッ・パチッ音の修正 ×${(op.events || []).length}`);
+    }
+    if (op.type === 'subsonic') {
+      const cutoff = clamp(op.cutoffHz || 16, 8, 24);
+      applyGlobalFilter(channels, rbjCoeffs('highpass', sampleRate, cutoff, 0.707, 0));
+      report.push(`Subsonic HPF ${cutoff.toFixed(0)} Hz`);
+    }
+    if (op.type === 'mud') {
+      const gainDb = op.gainDb ?? -1;
+      applyGlobalFilter(channels, rbjCoeffs('peaking', sampleRate, op.freqHz || 320, op.Q || 0.9, gainDb));
+      report.push(`Mud control ${gainDb.toFixed(1)} dB`);
+    }
+    if (op.type === 'harshness') {
+      const gainDb = op.gainDb ?? -1;
+      applyGlobalFilter(channels, rbjCoeffs('peaking', sampleRate, op.freqHz || 4300, op.Q || 1.0, gainDb));
+      report.push(`Harshness control ${gainDb.toFixed(1)} dB`);
+    }
+    if (op.type === 'fizz') {
+      const gainDb = op.gainDb ?? -1;
+      applyGlobalFilter(channels, rbjCoeffs('highshelf', sampleRate, op.freqHz || 8200, 0.707, gainDb));
+      report.push(`Fizz/Shimmer control ${gainDb.toFixed(1)} dB`);
+    }
+    if (op.type === 'percussive') {
+      for (const e of op.events || []) {
+        const center = e.time - shift;
+        const start = Math.max(0, center - (e.preSec ?? 0.012));
+        const end = Math.min(channels[0].length / sampleRate, center + (e.postSec ?? 0.042));
+        const gainDb = e.gainDb ?? -1.4;
+        const freq = e.freqHz || 6500;
+        applyLocalFilter(channels, sampleRate, start, end, rbjCoeffs('highshelf', sampleRate, freq, 0.707, gainDb), 0.008);
+      }
+      report.push(`Percussive harshness ×${(op.events || []).length}`);
+    }
+    if (op.type === 'sectionMatch') {
+      const start = Math.max(0, op.startSec - shift);
+      const end = Math.min(channels[0].length / sampleRate, op.endSec - shift);
+      if (Math.abs(op.levelGainDb || 0) >= 0.05) applyLocalGain(channels, sampleRate, start, end, op.levelGainDb, 0.04);
+      if (Math.abs(op.lowMidGainDb || 0) >= 0.05) applyLocalFilter(channels, sampleRate, start, end, rbjCoeffs('peaking', sampleRate, 320, 0.9, op.lowMidGainDb), 0.04);
+      if (Math.abs(op.highMidGainDb || 0) >= 0.05) applyLocalFilter(channels, sampleRate, start, end, rbjCoeffs('peaking', sampleRate, 4200, 1.0, op.highMidGainDb), 0.04);
+      if (Math.abs(op.highGainDb || 0) >= 0.05) applyLocalFilter(channels, sampleRate, start, end, rbjCoeffs('highshelf', sampleRate, 8200, 0.707, op.highGainDb), 0.04);
+      report.push('Regenerated section tonal match');
+    }
+  }
+
+  if (trimStart > 0) report.unshift(`Start trim ${(trimStart * 1000).toFixed(1)} ms`);
+  if (trimEnd < audioBuffer.duration) report.unshift(`End trim at ${trimEnd.toFixed(3)} sec`);
+
+  const safety = safetyGain ? applySafetyGain(channels, baselinePeak) : { applied:false, gainDb:0, beforePeak:maxPeak(channels), afterPeak:maxPeak(channels) };
+  if (safety.applied) report.push(`Safety gain ${safety.gainDb.toFixed(2)} dB (new clipping prevention)`);
+
+  return {
+    sampleRate,
+    channels,
+    length: channels[0].length,
+    duration: channels[0].length / sampleRate,
+    trimStartSec: state.trimStartSec,
+    trimEndSec: state.trimEndSec,
+    safety,
+    report,
+  };
+}
+
+function renderPreviewSegment(audioBuffer, operation, centerSec, durationSec = 6) {
+  const half = durationSec / 2;
+  let start = Math.max(0, centerSec - half);
+  let end = Math.min(audioBuffer.duration, centerSec + half);
+  if (operation?.type === 'trimStart') { start = 0; end = Math.min(audioBuffer.duration, durationSec); }
+  if (operation?.type === 'trimEnd') { end = audioBuffer.duration; start = Math.max(0, end - durationSec); }
+  if (operation?.type === 'sectionMatch') {
+    centerSec = (operation.startSec + operation.endSec) / 2;
+    start = Math.max(0, centerSec - half);
+    end = Math.min(audioBuffer.duration, centerSec + half);
+  }
+
+  const sr = audioBuffer.sampleRate;
+  const startIdx = Math.floor(start * sr);
+  const endIdx = Math.max(startIdx + 1, Math.ceil(end * sr));
+  const fake = {
+    sampleRate: sr,
+    numberOfChannels: audioBuffer.numberOfChannels,
+    length: endIdx - startIdx,
+    duration: (endIdx - startIdx) / sr,
+    getChannelData(c) { return audioBuffer.getChannelData(c).subarray(startIdx, endIdx); }
+  };
+
+  let localOp = structuredClone(operation);
+  if (localOp) {
+    if (localOp.type === 'trimStart') localOp.trimSec = Math.max(0, (localOp.trimSec || 0) - start);
+    if (localOp.type === 'trimEnd') localOp.endSec = Math.max(0.001, (localOp.endSec || end) - start);
+    if (localOp.type === 'clicks' || localOp.type === 'percussive') {
+      localOp.events = (localOp.events || []).map(e => ({...e, time: e.time - start})).filter(e => e.time >= 0 && e.time <= fake.duration);
+    }
+    if (localOp.type === 'sectionMatch') {
+      localOp.startSec = Math.max(0, localOp.startSec - start);
+      localOp.endSec = Math.min(fake.duration, localOp.endSec - start);
+    }
+  }
+
+  const rendered = renderRepairs(fake, localOp ? [localOp] : [], { safetyGain:false });
+  return { ...rendered, sourceStartSec: start };
+}
+
+function operationForGlobal(type, score) {
+  const reduction = scoreReduction(score);
+  if (type === 'subsonic') return { type, cutoffHz: 12 + 7 * clamp(score/100, 0, 1) };
+  if (type === 'mud') return { type, freqHz: 320, Q: 0.9, gainDb: -reduction };
+  if (type === 'harshness') return { type, freqHz: 4300, Q: 1.0, gainDb: -reduction };
+  if (type === 'fizz') return { type, freqHz: 8200, gainDb: -Math.min(1.4, reduction) };
+  return null;
+}
+
+function operationForSection(section) {
+  if (!section) return null;
+  const fizzPenalty = section.fizzPercent > 12 ? Math.min(0.6, section.fizzPercent / 100 * 1.1) : 0;
+  return {
+    type: 'sectionMatch',
+    startSec: section.startSec,
+    endSec: section.endSec,
+    levelGainDb: clamp(-section.levelDb * 0.75, -1.5, 1.2),
+    lowMidGainDb: clamp(-section.lowMidDb * 0.5, -1.4, 1.0),
+    highMidGainDb: clamp(-section.highMidDb * 0.5, -1.4, 1.0),
+    highGainDb: clamp(-section.highDb * 0.4 - fizzPenalty, -1.5, 0.9),
+    confidence: section.confidence,
+  };
+}
+
+Object.assign(S, { buildOperationFromIssue, renderRepairs, renderPreviewSegment, operationForGlobal, operationForSection });
+})(window.__SPLC);
+
+
+/* ===== wav.js ===== */
+(function(S){
+'use strict';
+function writeString(view, offset, str) {
+  for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+}
+
+function clampSample(v) { return Math.max(-1, Math.min(1, v)); }
+
+function encodeWav(rendered, { bitDepth = 24, float32 = false } = {}) {
+  const { channels, sampleRate } = rendered;
+  const numChannels = channels.length;
+  const frames = channels[0].length;
+  if (![16,24,32].includes(bitDepth)) bitDepth = 24;
+  if (float32) bitDepth = 32;
+  const bytesPerSample = bitDepth / 8;
+  const blockAlign = numChannels * bytesPerSample;
+  const dataSize = frames * blockAlign;
+  const buffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(buffer);
+
+  writeString(view, 0, 'RIFF');
+  view.setUint32(4, 36 + dataSize, true);
+  writeString(view, 8, 'WAVE');
+  writeString(view, 12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, float32 ? 3 : 1, true);
+  view.setUint16(22, numChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * blockAlign, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, bitDepth, true);
+  writeString(view, 36, 'data');
+  view.setUint32(40, dataSize, true);
+
+  let offset = 44;
+  for (let i = 0; i < frames; i++) {
+    for (let c = 0; c < numChannels; c++) {
+      const x = clampSample(channels[c][i]);
+      if (float32) {
+        view.setFloat32(offset, x, true);
+        offset += 4;
+      } else if (bitDepth === 16) {
+        const s = x < 0 ? Math.round(x * 32768) : Math.round(x * 32767);
+        view.setInt16(offset, s, true); offset += 2;
+      } else if (bitDepth === 24) {
+        let s = x < 0 ? Math.round(x * 8388608) : Math.round(x * 8388607);
+        if (s < 0) s += 16777216;
+        view.setUint8(offset, s & 0xff);
+        view.setUint8(offset + 1, (s >> 8) & 0xff);
+        view.setUint8(offset + 2, (s >> 16) & 0xff);
+        offset += 3;
+      } else {
+        const s = x < 0 ? Math.round(x * 2147483648) : Math.round(x * 2147483647);
+        view.setInt32(offset, s, true); offset += 4;
+      }
+    }
+  }
+  return new Blob([buffer], { type: 'audio/wav' });
+}
+
+function renderedToAudioBuffer(audioContext, rendered) {
+  const b = audioContext.createBuffer(rendered.channels.length, rendered.length, rendered.sampleRate);
+  for (let c = 0; c < rendered.channels.length; c++) b.copyToChannel(rendered.channels[c], c);
+  return b;
+}
+
+Object.assign(S, { encodeWav, renderedToAudioBuffer });
+})(window.__SPLC);
+
+
+/* ===== waveform.js ===== */
+(function(S){
+'use strict';
+const { clamp, formatTime } = S;
+
+
+const TYPE_STYLE = {
+  start: '#ef7777',
+  click: '#f0bf6a',
+  percussive: '#b599ff',
+  change: '#70d8da',
+};
+
+class WaveformView {
+  constructor(canvas, { onSeek = null, onRegion = null } = {}) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d');
+    this.onSeek = onSeek;
+    this.onRegion = onRegion;
+    this.mono = null;
+    this.duration = 0;
+    this.events = [];
+    this.playhead = 0;
+    this.selection = null;
+    this.regionMode = false;
+    this.dragging = false;
+    this.dragStartSec = 0;
+    this.dragEndSec = 0;
+    this.peaks = null;
+
+    this._bind();
+    this._resizeObserver = new ResizeObserver(() => this.resize());
+    this._resizeObserver.observe(canvas.parentElement);
+    this.resize();
+  }
+
+  _bind() {
+    this.canvas.addEventListener('pointerdown', e => {
+      if (!this.duration) return;
+      this.canvas.setPointerCapture(e.pointerId);
+      const t = this._xToTime(e.offsetX);
+      if (this.regionMode) {
+        this.dragging = true;
+        this.dragStartSec = t;
+        this.dragEndSec = t;
+        this.selection = { start: t, end: t };
+        this.draw();
+      } else {
+        this.onSeek?.(t);
+      }
+    });
+
+    this.canvas.addEventListener('pointermove', e => {
+      if (!this.dragging || !this.regionMode) return;
+      this.dragEndSec = this._xToTime(e.offsetX);
+      this.selection = {
+        start: Math.min(this.dragStartSec, this.dragEndSec),
+        end: Math.max(this.dragStartSec, this.dragEndSec),
+      };
+      this.draw();
+    });
+
+    const finish = e => {
+      if (!this.dragging) return;
+      this.dragging = false;
+      try { this.canvas.releasePointerCapture(e.pointerId); } catch {}
+      if (this.selection && this.selection.end - this.selection.start >= 0.1) {
+        this.onRegion?.(this.selection.start, this.selection.end);
+      }
+      this.draw();
+    };
+    this.canvas.addEventListener('pointerup', finish);
+    this.canvas.addEventListener('pointercancel', finish);
+  }
+
+  resize() {
+    const rect = this.canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    const w = Math.max(300, Math.floor(rect.width * dpr));
+    const h = Math.max(180, Math.floor(rect.height * dpr));
+    if (this.canvas.width !== w || this.canvas.height !== h) {
+      this.canvas.width = w;
+      this.canvas.height = h;
+      this._buildPeaks();
+    }
+    this.draw();
+  }
+
+  setAudio(mono, duration) {
+    this.mono = mono;
+    this.duration = duration || 0;
+    this.events = [];
+    this.playhead = 0;
+    this.selection = null;
+    this._buildPeaks();
+    this.draw();
+  }
+
+  setEvents(events) {
+    this.events = events || [];
+    this.draw();
+  }
+
+  setPlayhead(time) {
+    this.playhead = clamp(time || 0, 0, this.duration || 0);
+    this.draw();
+  }
+
+  setRegionMode(enabled) {
+    this.regionMode = !!enabled;
+    this.canvas.style.cursor = enabled ? 'crosshair' : 'pointer';
+  }
+
+  clearSelection() {
+    this.selection = null;
+    this.draw();
+  }
+
+  setSelection(start, end) {
+    this.selection = { start, end };
+    this.draw();
+  }
+
+  _buildPeaks() {
+    if (!this.mono || !this.canvas.width) return;
+    const cols = Math.max(1, Math.floor(this.canvas.width));
+    const step = this.mono.length / cols;
+    const min = new Float32Array(cols);
+    const max = new Float32Array(cols);
+    for (let x = 0; x < cols; x++) {
+      let lo = 1;
+      let hi = -1;
+      const a = Math.floor(x * step);
+      const b = Math.min(this.mono.length, Math.max(a + 1, Math.floor((x + 1) * step)));
+      const stride = Math.max(1, Math.floor((b - a) / 140));
+      for (let i = a; i < b; i += stride) {
+        const v = this.mono[i];
+        if (v < lo) lo = v;
+        if (v > hi) hi = v;
+      }
+      min[x] = lo === 1 ? 0 : lo;
+      max[x] = hi === -1 ? 0 : hi;
+    }
+    this.peaks = { min, max };
+  }
+
+  _xToTime(cssX) {
+    const rect = this.canvas.getBoundingClientRect();
+    return clamp(cssX / rect.width, 0, 1) * this.duration;
+  }
+
+  _timeToX(t) {
+    return this.duration ? (t / this.duration) * this.canvas.width : 0;
+  }
+
+  draw() {
+    const ctx = this.ctx;
+    const w = this.canvas.width;
+    const h = this.canvas.height;
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = '#0a0d11';
+    ctx.fillRect(0, 0, w, h);
+
+    const mid = h / 2;
+    ctx.strokeStyle = '#242a32';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, mid);
+    ctx.lineTo(w, mid);
+    ctx.stroke();
+
+    // Time grid.
+    if (this.duration) {
+      ctx.fillStyle = '#68717d';
+      ctx.font = `${11 * (window.devicePixelRatio || 1)}px system-ui`;
+      const lines = 6;
+      for (let i = 0; i <= lines; i++) {
+        const x = (i / lines) * w;
+        const t = (i / lines) * this.duration;
+        ctx.strokeStyle = '#151a20';
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+        ctx.fillText(formatTime(t).slice(0, 5), x + 5, 17 * (window.devicePixelRatio || 1));
+      }
+    }
+
+    // Selection.
+    if (this.selection && this.duration) {
+      const x1 = this._timeToX(this.selection.start);
+      const x2 = this._timeToX(this.selection.end);
+      ctx.fillStyle = 'rgba(112,216,218,.12)';
+      ctx.fillRect(x1, 0, Math.max(1, x2 - x1), h);
+      ctx.strokeStyle = 'rgba(112,216,218,.85)';
+      ctx.strokeRect(x1, 0, Math.max(1, x2 - x1), h);
+    }
+
+    // Waveform.
+    if (this.peaks) {
+      ctx.strokeStyle = '#d8dde4';
+      ctx.lineWidth = Math.max(1, window.devicePixelRatio || 1);
+      ctx.beginPath();
+      const scale = h * 0.39;
+      for (let x = 0; x < this.peaks.min.length; x++) {
+        ctx.moveTo(x, mid - this.peaks.max[x] * scale);
+        ctx.lineTo(x, mid - this.peaks.min[x] * scale);
+      }
+      ctx.stroke();
+    }
+
+    // Event markers.
+    if (this.duration) {
+      for (const event of this.events) {
+        const x = this._timeToX(event.time);
+        ctx.strokeStyle = TYPE_STYLE[event.type] || '#fff';
+        ctx.lineWidth = Math.max(1, (window.devicePixelRatio || 1) * 1.2);
+        ctx.beginPath(); ctx.moveTo(x, 24); ctx.lineTo(x, h - 6); ctx.stroke();
+        ctx.fillStyle = TYPE_STYLE[event.type] || '#fff';
+        ctx.beginPath();
+        ctx.moveTo(x - 5, 24); ctx.lineTo(x + 5, 24); ctx.lineTo(x, 34); ctx.closePath(); ctx.fill();
+      }
+    }
+
+    // Playhead.
+    if (this.duration) {
+      const x = this._timeToX(this.playhead);
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = Math.max(1, (window.devicePixelRatio || 1) * 1.2);
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+    }
+  }
+}
+
+Object.assign(S, { WaveformView });
+})(window.__SPLC);
+
+
+/* ===== app.js ===== */
+(function(S){
+'use strict';
+const { parseWavMetadata, formatTime, clamp, analyzeAudio, analyzeSection, WaveformView, renderRepairs, renderPreviewSegment, operationForGlobal, operationForSection, encodeWav, renderedToAudioBuffer } = S;
+
+
+
+
+
+
+const $ = sel => document.querySelector(sel);
+const dropZone = $('#dropZone');
+const fileInput = $('#fileInput');
+const selectFileBtn = $('#selectFileBtn');
+const workspace = $('#workspace');
+const trackName = $('#trackName');
+const trackMeta = $('#trackMeta');
+const playBtn = $('#playBtn');
+const stopBtn = $('#stopBtn');
+const reanalyzeBtn = $('#reanalyzeBtn');
+const newFileBtn = $('#newFileBtn');
+const analysisState = $('#analysisState');
+const workflowText = $('#workflowText');
+const progressBar = $('#progressBar');
+const summaryList = $('#summaryList');
+const issueCountPill = $('#issueCountPill');
+const issueList = $('#issueList');
+const approvedCount = $('#approvedCount');
+const repairPlan = $('#repairPlan');
+const renderBtn = $('#renderBtn');
+const renderState = $('#renderState');
+const postCheck = $('#postCheck');
+const downloadBtn = $('#downloadBtn');
+const markRegionBtn = $('#markRegionBtn');
+const clearRegionBtn = $('#clearRegionBtn');
+const sectionState = $('#sectionState');
+const sectionReport = $('#sectionReport');
+const selectionInfo = $('#selectionInfo');
+const timeReadout = $('#timeReadout');
+
+let audioContext = null;
+let audioBuffer = null;
+let currentFile = null;
+let audioEl = null;
+let objectUrl = null;
+let downloadUrl = null;
+let wavMeta = null;
+let analysis = null;
+let postAnalysis = null;
+let issues = [];
+let approved = new Set();
+let regionMode = false;
+let selectedRegion = null;
+let sectionAnalysis = null;
+let rafId = null;
+let previewSource = null;
+let busy = false;
+
+const waveform = new WaveformView($('#waveCanvas'), {
+  onSeek: time => seek(time),
+  onRegion: (start, end) => handleRegion(start, end),
+});
+
+const severityRank = { OK:0, LOW:1, MEDIUM:2, HIGH:3 };
+const fmtDb = (v, d=1) => `${v > 0 ? '+' : ''}${Number(v).toFixed(d)} dB`;
+const fmtPct = (v, d=0) => `${v > 0 ? '+' : ''}${Number(v).toFixed(d)}%`;
+const escapeHtml = value => String(value).replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+
+function setProgress(value, text, state = null) {
+  progressBar.style.width = `${clamp(value, 0, 1) * 100}%`;
+  if (text) workflowText.textContent = text;
+  if (state) {
+    analysisState.textContent = state;
+    analysisState.className = `state-pill ${state === '完了' ? 'done' : state === 'エラー' ? '' : 'running'}`;
+  }
+}
+
+function ensureAudioElement(file) {
+  if (audioEl) { audioEl.pause(); audioEl.src = ''; }
+  if (objectUrl) URL.revokeObjectURL(objectUrl);
+  objectUrl = URL.createObjectURL(file);
+  audioEl = new Audio(objectUrl);
+  audioEl.preload = 'auto';
+  audioEl.addEventListener('play', startTicker);
+  audioEl.addEventListener('pause', updatePlayButton);
+  audioEl.addEventListener('ended', updatePlayButton);
+}
+
+function startTicker() {
+  cancelAnimationFrame(rafId);
+  const tick = () => {
+    if (!audioEl || !audioBuffer) return;
+    const now = audioEl.currentTime || 0;
+    waveform.setPlayhead(now);
+    timeReadout.textContent = `${formatTime(now)} / ${formatTime(audioBuffer.duration)}`;
+    updatePlayButton();
+    if (!audioEl.paused) rafId = requestAnimationFrame(tick);
+  };
+  rafId = requestAnimationFrame(tick);
+}
+
+function updatePlayButton() {
+  playBtn.textContent = audioEl && !audioEl.paused ? '❚❚ PAUSE' : '▶ PLAY';
+}
+
+function stopAllAudio() {
+  if (audioEl) audioEl.pause();
+  if (previewSource) {
+    try { previewSource.stop(); } catch {}
+    previewSource = null;
+  }
+}
+
+async function loadFile(file) {
+  if (!file || !/\.wav$/i.test(file.name)) {
+    alert('WAVファイルを選択してください。');
+    return;
+  }
+  if (busy) return;
+
+  currentFile = file;
+  analysis = null;
+  postAnalysis = null;
+  issues = [];
+  approved.clear();
+  selectedRegion = null;
+  sectionAnalysis = null;
+  postCheck.classList.add('hidden');
+  downloadBtn.classList.add('hidden');
+  if (downloadUrl) { URL.revokeObjectURL(downloadUrl); downloadUrl = null; }
+
+  try {
+    setProgress(0.02, 'WAVを読み込んでいます…', '解析中');
+    const bytes = await file.arrayBuffer();
+    wavMeta = parseWavMetadata(bytes);
+    audioContext ||= new (window.AudioContext || window.webkitAudioContext)();
+    audioBuffer = await audioContext.decodeAudioData(bytes.slice(0));
+    ensureAudioElement(file);
+
+    trackName.textContent = file.name;
+    const bitText = wavMeta?.bitDepth ? `${wavMeta.bitDepth} bit` : 'bit depth unknown';
+    trackMeta.innerHTML = [
+      formatTime(audioBuffer.duration),
+      `${audioBuffer.sampleRate.toLocaleString()} Hz`, bitText,
+      audioBuffer.numberOfChannels === 2 ? 'ステレオ' : `${audioBuffer.numberOfChannels} ch`,
+      `${(file.size / 1024 / 1024).toFixed(1)} MB`,
+    ].map(x => `<span>${x}</span>`).join('');
+
+    const mono = new Float32Array(audioBuffer.length);
+    for (let c = 0; c < audioBuffer.numberOfChannels; c++) {
+      const ch = audioBuffer.getChannelData(c);
+      for (let i = 0; i < ch.length; i++) mono[i] += ch[i] / audioBuffer.numberOfChannels;
+    }
+    waveform.setAudio(mono, audioBuffer.duration);
+    timeReadout.textContent = `00:00.000 / ${formatTime(audioBuffer.duration)}`;
+    dropZone.classList.add('hidden');
+    workspace.classList.remove('hidden');
+    sectionReport.innerHTML = '';
+    sectionState.textContent = '未指定';
+    sectionState.className = 'state-pill';
+    renderPlan();
+    await runAnalysis();
+  } catch (err) {
+    console.error(err);
+    setProgress(0, 'WAVを読み込めませんでした。', 'エラー');
+    alert(`WAVを読み込めませんでした。
+${err.message || err}`);
+  }
+}
+
+async function runAnalysis() {
+  if (!audioBuffer || busy) return;
+  busy = true;
+  reanalyzeBtn.disabled = true;
+  renderBtn.disabled = true;
+  approved.clear();
+  setProgress(0.05, 'Suno WAVの問題を解析しています…', '解析中');
+  issueList.innerHTML = '<p class="muted">解析中…</p>';
+  summaryList.innerHTML = '<p class="muted">解析中…</p>';
+  try {
+    analysis = await analyzeAudio(audioBuffer, (p, text) => setProgress(0.05 + p * 0.85, text, '解析中'));
+    waveform.setEvents(analysis.events);
+    issues = buildIssues(analysis);
+    if (selectedRegion) upsertSectionIssue();
+    renderSummary();
+    renderIssues();
+    renderPlan();
+    setProgress(1, `解析完了 — ${issues.length}件の確認候補`, '完了');
+  } catch (err) {
+    console.error(err);
+    setProgress(0, `解析エラー: ${err.message || err}`, 'エラー');
+  } finally {
+    busy = false;
+    reanalyzeBtn.disabled = false;
+    renderPlan();
+  }
+}
+
+function buildIssues(a) {
+  const out = [];
+  const startEvent = a.events.find(e => e.type === 'start');
+  const endEvent = a.events.find(e => e.type === 'end');
+  const clickEvents = a.events.filter(e => e.type === 'click' && e.confidence >= 58);
+  const percEvents = a.events.filter(e => e.type === 'percussive' && e.confidence >= 55);
+  const changeEvents = a.events.filter(e => e.type === 'change');
+
+  if (startEvent) out.push({
+    id:'start', title:'曲頭のノイズ', severity:startEvent.severity, confidence:startEvent.confidence,
+    problem:`曲頭 ${Math.round(startEvent.suggestedTrimMs || 0)} ms以内に、本来の曲とは別の瞬間ノイズ候補があります。`,
+    direction:`先頭 ${(startEvent.suggestedTrimMs || 0).toFixed(1)} ms をトリムします。フェードインは使いません。`,
+    operation:{ type:'trimStart', trimSec:startEvent.endSec || (startEvent.suggestedTrimMs/1000) },
+    previewTime:0.04, repairable:true, safe:true,
+  });
+
+  if (endEvent) {
+    const nearEnd = audioBuffer.duration - endEvent.time < 0.055;
+    out.push({
+      id:'end', title:'曲末のノイズ', severity:endEvent.severity, confidence:endEvent.confidence,
+      problem:'曲末付近に孤立した瞬間ノイズ候補があります。自然な余韻との区別が必要です。',
+      direction: nearEnd ? 'イベント直前でトリムし、末尾の孤立ノイズだけを除去します。' : '余韻を削る危険があるため、自動修復しません。耳で確認してください。',
+      operation: nearEnd ? { type:'trimEnd', endSec:Math.max(0.001, endEvent.time - 0.001) } : null,
+      previewTime:audioBuffer.duration - 0.03, repairable:nearEnd, safe:false,
+    });
+  }
+
+  if (clickEvents.length) out.push({
+    id:'clicks', title:`プツッ・パチッ音 (${clickEvents.length}件)`, severity:maxSeverity(clickEvents), confidence:avg(clickEvents.map(e=>e.confidence)),
+    problem:`極短い波形の跳ねを ${clickEvents.length} 件検出しました。スネアなどの打楽器と区別しやすい、検出確度の高い候補だけを対象にしています。`,
+    direction:'各イベント周辺約1msだけを補間し、長い区間や音量バランスは変更しません。',
+    times:clickEvents.map(e=>e.time),
+    operation:{ type:'clicks', events:clickEvents.map(e=>({time:e.time,widthMs:0.65})) },
+    previewTime:clickEvents[0].time, repairable:true, safe:false,
+  });
+
+  if (a.summary.clipping.count > 0) out.push({
+    id:'clipping', title:'音割れ・ピーク異常', severity:a.summary.clipping.severity, confidence:95,
+    problem:`0 dBFS近辺に ${a.summary.clipping.count} サンプルの音割れ候補があります。すでに潰れた波形は、単純に音量を下げても元には戻りません。`,
+    direction:'この版では自動で音割れ修復はしません。必要ならSuno側での再生成や別テイクを優先してください。',
+    operation:null, previewTime:audioBuffer.duration*0.4, repairable:false,
+  });
+
+  if (a.summary.dc.severity !== 'OK') out.push({
+    id:'dc', title:'波形の中心ズレ', severity:a.summary.dc.severity, confidence:92,
+    problem:'波形全体が0の中心線から少し偏っています。音量の余裕幅や編集点に悪影響を与える可能性があります。',
+    direction:'左右それぞれの中心ズレだけを補正します。パンやステレオ幅は変更しません。',
+    operation:{type:'dc'}, previewTime:audioBuffer.duration*0.35, repairable:true, safe:true,
+  });
+
+  for (const [id,title,problem,direction] of [
+    ['subsonic','不要な超低域','0〜30Hz付近に、聴こえにくいのに余裕幅を消費する超低域が多い可能性があります。','曲の解析結果に応じて、約12〜19Hz付近から不要な超低域だけを緩やかに減らします。20Hz以下を一律に切る処理ではありません。'],
+    ['mud','低中域の濁り','150〜500Hz帯が相対的に過剰で、濁りにつながる可能性があります。','v0.2では320Hz付近を最大約-1.6dBだけ穏やかに整理します。強い音作りはしません。'],
+    ['harshness','中高域の刺さり','2〜6kHz帯が相対的に硬く、耳に刺さる可能性があります。','4.3kHz付近を最大約-1.6dBだけ穏やかに整理します。'],
+    ['fizz','高域のチリつき','高域にノイズ状の細かな成分が多く、Suno特有のチリつきや金属っぽさにつながっている可能性があります。','8.2kHz以上を最大約-1.4dBだけ穏やかに整理します。自然な空気感を残すため、強く削りません。'],
+  ]) {
+    const s = a.summary[id];
+    if (s && s.severity !== 'OK') out.push({
+      id, title, severity:s.severity, confidence:Math.min(90, 58 + s.score*0.32), problem, direction,
+      operation:operationForGlobal(id, s.score), previewTime:null, repairable:true, safe:false,
+    });
+  }
+
+  if (percEvents.length) {
+    const repairedEvents = percEvents.map(e => ({
+      time:e.time,
+      freqHz:e.focusBand === '2–4 kHz' ? 3500 : e.focusBand === '4–6 kHz' ? 5200 : 7600,
+      gainDb:-(0.8 + clamp(e.score/100,0,1)*1.2), preSec:0.012, postSec:0.045,
+    }));
+    out.push({
+      id:'percussive', title:`打楽器の高域の刺さり (${percEvents.length}件)`, severity:maxSeverity(percEvents), confidence:avg(percEvents.map(e=>e.confidence)),
+      problem:`短い打音だけ高域が突出している候補を ${percEvents.length} 件検出しました。`,
+      direction:'刺さりが出ている瞬間の約60msだけ、高域を1〜2dB程度抑えます。打音の勢いはできるだけ残します。',
+      times:percEvents.map(e=>e.time), operation:{type:'percussive',events:repairedEvents},
+      previewTime:percEvents[0].time, repairable:true, safe:false,
+    });
+  }
+
+  if (a.summary.stereo.severity !== 'OK') out.push({
+    id:'stereo', title:'左右・位相の変化', severity:a.summary.stereo.severity, confidence:55,
+    problem:`左右の相関値が ${a.summary.stereo.correlation.toFixed(2)} です。意図的な空間表現の可能性があります。`,
+    direction:'自動修正しません。パン、ボーカルの移動、ステレオ幅、左右の空間表現を保持します。',
+    operation:null, previewTime:audioBuffer.duration*0.5, repairable:false,
+  });
+
+  if (changeEvents.length) out.push({
+    id:'change', title:`音質の変化点 (${changeEvents.length}候補)`, severity:maxSeverity(changeEvents), confidence:avg(changeEvents.map(e=>e.confidence)),
+    problem:'複数の音質要素が同時に変化した地点があります。Open Editorなどで部分再生成した境界の可能性があります。',
+    direction:'自動修正しません。再生成した場所が分かる場合は波形上で「再生成区間を指定」してください。',
+    times:changeEvents.map(e=>e.time), operation:null, previewTime:changeEvents[0].time, repairable:false,
+  });
+
+  return out;
+}
+
+function maxSeverity(events) {
+  return events.reduce((best,e)=>severityRank[e.severity] > severityRank[best] ? e.severity : best,'OK');
+}
+function avg(a){ return a.length ? a.reduce((x,y)=>x+y,0)/a.length : 0; }
+function severityLabel(v){ return ({OK:'問題なし',LOW:'低',MEDIUM:'中',HIGH:'高'})[v] || v; }
+
+function renderSummary() {
+  if (!analysis) return;
+  const s = analysis.summary;
+  const entries = [
+    ['曲頭ノイズ',s.start],['プツッ音',s.click],['中心ズレ',s.dc],['不要な超低域',s.subsonic],['低中域の濁り',s.mud],['中高域の刺さり',s.harshness],['高域のチリつき',s.fizz],['打楽器の刺さり',s.percussive],['左右・位相',s.stereo],['音質の変化点',s.change]
+  ];
+  summaryList.innerHTML = entries.map(([name,item]) => `<div class="summary-item"><span>${name}</span><strong class="severity ${item.severity.toLowerCase()}">${severityLabel(item.severity)}</strong></div>`).join('');
+  issueCountPill.textContent = `修正候補 ${issues.length}件`;
+  issueCountPill.className = `state-pill ${issues.length ? 'running' : 'done'}`;
+}
+
+function renderIssues() {
+  if (!issues.length) {
+    issueList.innerHTML = '<div class="clean-state"><strong>大きな問題候補は見つかりませんでした。</strong><span>必要なら再生成区間だけ手動指定できます。</span></div>';
+    updateApprovalUI();
+    return;
+  }
+  issueList.innerHTML = issues.map(issue => {
+    const approvedNow = approved.has(issue.id);
+    const times = issue.times?.length ? `<div class="issue-times">${issue.times.slice(0,10).map(t=>`<button class="time-chip" data-seek="${t}">${formatTime(t)}</button>`).join('')}${issue.times.length>10?`<span>+${issue.times.length-10}</span>`:''}</div>` : '';
+    return `<article class="issue-card ${approvedNow?'approved':''}" data-issue-id="${issue.id}">
+      <div class="issue-head">
+        <div><span class="severity ${issue.severity.toLowerCase()}">${severityLabel(issue.severity)}</span><h3>${escapeHtml(issue.title)}</h3></div>
+        <span class="confidence">検出確度 ${Math.round(issue.confidence)}%</span>
+      </div>
+      <div class="issue-grid">
+        <div><span class="issue-label">問題</span><p>${escapeHtml(issue.problem)}</p></div>
+        <div><span class="issue-label">推奨修正</span><p>${escapeHtml(issue.direction)}</p></div>
+      </div>
+      ${times}
+      <div class="issue-actions">
+        <button class="button small" data-action="original">▶ 修正前</button>
+        ${issue.repairable ? `<button class="button small" data-action="preview">▶ 修正後を試聴</button><button class="button small approve ${approvedNow?'active':''}" data-action="approve">${approvedNow?'✓ 使用する':'この修正を使う'}</button>` : '<span class="warning-only">要確認 — 自動修正なし</span>'}
+      </div>
+    </article>`;
+  }).join('');
+
+  issueList.querySelectorAll('.issue-card').forEach(card => {
+    const issue = issues.find(x => x.id === card.dataset.issueId);
+    card.querySelector('[data-action="original"]')?.addEventListener('click', () => previewIssue(issue, false));
+    card.querySelector('[data-action="preview"]')?.addEventListener('click', () => previewIssue(issue, true));
+    card.querySelector('[data-action="approve"]')?.addEventListener('click', () => toggleApproval(issue.id));
+    card.querySelectorAll('[data-seek]').forEach(btn => btn.addEventListener('click', () => seek(Number(btn.dataset.seek))));
+  });
+  updateApprovalUI();
+}
+
+function toggleApproval(id) {
+  if (approved.has(id)) approved.delete(id); else approved.add(id);
+  renderIssues();
+  renderPlan();
+}
+
+function updateApprovalUI() {
+  approvedCount.textContent = approved.size;
+}
+
+function renderPlan() {
+  updateApprovalUI();
+  const chosen = issues.filter(i => approved.has(i.id) && i.operation);
+  renderBtn.disabled = busy || !chosen.length;
+  if (!chosen.length) {
+    repairPlan.innerHTML = '<p class="muted">使う修正を1件以上選ぶと実行できます。</p>';
+  } else {
+    repairPlan.innerHTML = `<div class="plan-list">${chosen.map(i=>`<span>✓ ${escapeHtml(i.title)}</span>`).join('')}</div><div class="preserve-line">パン / ステレオ幅 / リバーブ / ダイナミクス / LUFS — 変更しません</div>`;
+  }
+}
+
+async function previewIssue(issue, fixed) {
+  if (!audioBuffer || !issue) return;
+  stopAllAudio();
+  await audioContext.resume();
+  let center = issue.previewTime;
+  if (center == null) center = audioEl?.currentTime > 0.5 ? audioEl.currentTime : audioBuffer.duration * 0.38;
+  const rendered = renderPreviewSegment(audioBuffer, fixed ? issue.operation : null, center, 6);
+  const b = renderedToAudioBuffer(audioContext, rendered);
+  previewSource = audioContext.createBufferSource();
+  previewSource.buffer = b;
+  previewSource.connect(audioContext.destination);
+  previewSource.onended = () => { previewSource = null; };
+  previewSource.start();
+  const card = issueList.querySelector(`[data-issue-id="${issue.id}"]`);
+  const old = card?.querySelector('.preview-status');
+  old?.remove();
+  if (card) {
+    const badge = document.createElement('span');
+    badge.className = 'preview-status';
+    badge.textContent = fixed ? '修正後を再生中' : '修正前を再生中';
+    card.querySelector('.issue-actions').appendChild(badge);
+  }
+}
+
+function handleRegion(start, end) {
+  selectedRegion = {start,end};
+  selectionInfo.classList.remove('hidden');
+  selectionInfo.textContent = `再生成区間: ${formatTime(start)} → ${formatTime(end)} (${(end-start).toFixed(2)}秒)`;
+  sectionState.textContent = '区間指定済み';
+  sectionState.className = 'state-pill done';
+  if (analysis) upsertSectionIssue();
+}
+
+function upsertSectionIssue() {
+  if (!selectedRegion || !analysis) return;
+  sectionAnalysis = analyzeSection(audioBuffer, analysis, selectedRegion.start, selectedRegion.end);
+  issues = issues.filter(i => i.id !== 'section-match');
+  approved.delete('section-match');
+  if (!sectionAnalysis) {
+    sectionReport.innerHTML = '<p class="muted">比較用データが不足しています。もう少し長い区間を指定してください。</p>';
+    renderIssues(); renderPlan(); return;
+  }
+  const op = operationForSection(sectionAnalysis);
+  issues.push({
+    id:'section-match', title:'再生成区間の音質差', severity:sectionSeverity(sectionAnalysis), confidence:sectionAnalysis.confidence,
+    problem:`指定区間 ${formatTime(selectedRegion.start)}〜${formatTime(selectedRegion.end)} が前後と異なる音響特性を持っています。`,
+    direction:`音量 ${fmtDb(op.levelGainDb)} / 低中域 ${fmtDb(op.lowMidGainDb)} / 中高域 ${fmtDb(op.highMidGainDb)} / 高域 ${fmtDb(op.highGainDb)} の範囲で穏やかに近づけます。ステレオ幅は変更しません。`,
+    operation:op, previewTime:(selectedRegion.start+selectedRegion.end)/2, repairable:true, safe:false,
+  });
+  renderSectionReport(sectionAnalysis, op);
+  renderSummary(); renderIssues(); renderPlan();
+}
+
+function sectionSeverity(r) {
+  const magnitude = Math.max(Math.abs(r.levelDb),Math.abs(r.lowMidDb),Math.abs(r.highMidDb),Math.abs(r.highDb),Math.abs(r.fizzPercent)/15);
+  if (magnitude >= 3) return 'HIGH';
+  if (magnitude >= 1.5) return 'MEDIUM';
+  return 'LOW';
+}
+
+function renderSectionReport(r, op) {
+  const rows = [
+    ['指定区間',`${formatTime(r.startSec)} – ${formatTime(r.endSec)}`],
+    ['音量差',fmtDb(r.levelDb)],['低中域',fmtDb(r.lowMidDb)],['中高域',fmtDb(r.highMidDb)],['高域',fmtDb(r.highDb)],['高域のチリつき',fmtPct(r.fizzPercent)],
+    ['ステレオ幅',`${fmtPct(r.stereoWidthPercent)} — 確認のみ`],['検出確度',`${Math.round(r.confidence)}%`],
+  ];
+  sectionReport.innerHTML = rows.map(([k,v])=>`<div class="metric"><span>${k}</span><strong>${v}</strong></div>`).join('') + `<div class="section-suggestion"><strong>修正案</strong><span>音量 ${fmtDb(op.levelGainDb)} / 低中域 ${fmtDb(op.lowMidGainDb)} / 中高域 ${fmtDb(op.highMidGainDb)} / 高域 ${fmtDb(op.highGainDb)}</span></div>`;
+}
+
+async function renderFinal() {
+  if (!audioBuffer || busy) return;
+  const chosen = issues.filter(i => approved.has(i.id) && i.operation);
+  if (!chosen.length) return;
+  busy = true;
+  stopAllAudio();
+  renderBtn.disabled = true;
+  downloadBtn.classList.add('hidden');
+  postCheck.classList.add('hidden');
+  renderState.textContent = '修正中';
+  renderState.className = 'state-pill running';
+  setProgress(0.08, '選んだ修正を元WAVへ一度だけ適用しています…', '解析中');
+
+  try {
+    await new Promise(r=>setTimeout(r,20));
+    const operations = chosen.map(i => i.operation);
+    const rendered = renderRepairs(audioBuffer, operations, {safetyGain:true});
+    setProgress(0.62, '修正後WAVを再チェックしています…', '解析中');
+    const renderedBuffer = renderedToAudioBuffer(audioContext, rendered);
+    postAnalysis = await analyzeAudio(renderedBuffer, (p,text)=>setProgress(0.62+p*0.30, `修正後チェック: ${text}`, '解析中'));
+
+    const inputDepth = [16,24,32].includes(wavMeta?.bitDepth) ? wavMeta.bitDepth : 24;
+    const float32 = wavMeta?.audioFormat === 3 && inputDepth === 32;
+    const blob = encodeWav(rendered, {bitDepth:inputDepth, float32});
+    if (downloadUrl) URL.revokeObjectURL(downloadUrl);
+    downloadUrl = URL.createObjectURL(blob);
+    const base = currentFile.name.replace(/\.wav$/i,'');
+    downloadBtn.href = downloadUrl;
+    downloadBtn.download = `${base}_LANDR前仕上げ.wav`;
+    downloadBtn.classList.remove('hidden');
+
+    renderPostCheck(rendered, chosen);
+    renderState.textContent = 'LANDRへ送れます';
+    renderState.className = 'state-pill done';
+    setProgress(1, '修正後の再チェックが完了しました。WAVを保存できます。', '完了');
+  } catch (err) {
+    console.error(err);
+    renderState.textContent = 'エラー';
+    renderState.className = 'state-pill';
+    setProgress(0, `修正処理に失敗しました: ${err.message || err}`, 'エラー');
+  } finally {
+    busy = false;
+    renderPlan();
+  }
+}
+
+function renderPostCheck(rendered, chosen) {
+  const before = analysis.summary, after = postAnalysis.summary;
+  const row = (name,b,a,extra='') => `<div class="post-row"><span>${name}</span><strong>${b} → ${a}</strong><small>${extra}</small></div>`;
+  postCheck.innerHTML = `<div class="post-title"><strong>修正後チェック</strong><span>${chosen.length}件の修正を適用</span></div>
+    ${row('曲頭ノイズ',severityLabel(before.start.severity),severityLabel(after.start.severity))}
+    ${row('プツッ・パチッ音',before.click.count,after.click.count)}
+    ${row('波形の中心ズレ',severityLabel(before.dc.severity),severityLabel(after.dc.severity))}
+    ${row('不要な超低域',severityLabel(before.subsonic.severity),severityLabel(after.subsonic.severity))}
+    ${row('低中域の濁り',severityLabel(before.mud.severity),severityLabel(after.mud.severity))}
+    ${row('中高域の刺さり',severityLabel(before.harshness.severity),severityLabel(after.harshness.severity))}
+    ${row('高域のチリつき',severityLabel(before.fizz.severity),severityLabel(after.fizz.severity))}
+    ${row('打楽器の高域の刺さり',before.percussive.count,after.percussive.count)}
+    ${row('書き出し形式',`${audioBuffer.sampleRate} Hz`,`${rendered.sampleRate} Hz`, `${wavMeta?.bitDepth || 24} bit / ${rendered.channels.length===2?'ステレオ':rendered.channels.length+' ch'}`)}
+    <div class="preserve-line">ステレオ幅 / パン / リバーブ / ダイナミクス / LUFS：意図的に変更していません。</div>
+    ${rendered.safety.applied ? `<div class="safety-note">修正後の音割れを防ぐため、左右同じ量だけ全体音量を ${rendered.safety.gainDb.toFixed(2)} dB 調整しました。</div>`:''}`;
+  postCheck.classList.remove('hidden');
+}
+
+function seek(time) {
+  if (!audioEl || !audioBuffer) return;
+  stopAllAudio();
+  audioEl.currentTime = clamp(time,0,audioBuffer.duration);
+  waveform.setPlayhead(audioEl.currentTime);
+  timeReadout.textContent = `${formatTime(audioEl.currentTime)} / ${formatTime(audioBuffer.duration)}`;
+}
+function togglePlay() {
+  if (!audioEl) return;
+  if (previewSource) { try{previewSource.stop();}catch{} previewSource=null; }
+  if (audioEl.paused) audioEl.play().catch(()=>{}); else audioEl.pause();
+}
+function stop() {
+  stopAllAudio();
+  if (!audioEl) return;
+  audioEl.currentTime = 0; waveform.setPlayhead(0);
+  if (audioBuffer) timeReadout.textContent = `00:00.000 / ${formatTime(audioBuffer.duration)}`;
+}
+
+
+newFileBtn.addEventListener('click',()=>{ fileInput.value=''; fileInput.click(); });
+fileInput.addEventListener('change',()=>loadFile(fileInput.files?.[0]));
+for (const name of ['dragenter','dragover']) dropZone.addEventListener(name,e=>{e.preventDefault();dropZone.classList.add('dragover');});
+for (const name of ['dragleave','drop']) dropZone.addEventListener(name,e=>{e.preventDefault();dropZone.classList.remove('dragover');});
+dropZone.addEventListener('drop',e=>loadFile(e.dataTransfer.files?.[0]));
+playBtn.addEventListener('click',togglePlay);
+stopBtn.addEventListener('click',stop);
+reanalyzeBtn.addEventListener('click',runAnalysis);
+renderBtn.addEventListener('click',renderFinal);
+markRegionBtn.addEventListener('click',()=>{
+  regionMode=!regionMode; waveform.setRegionMode(regionMode); markRegionBtn.classList.toggle('active',regionMode);
+  markRegionBtn.textContent=regionMode?'波形をドラッグ…':'再生成区間を指定';
+});
+clearRegionBtn.addEventListener('click',()=>{
+  selectedRegion=null;sectionAnalysis=null;approved.delete('section-match');issues=issues.filter(i=>i.id!=='section-match');
+  waveform.clearSelection();selectionInfo.classList.add('hidden');sectionReport.innerHTML='';sectionState.textContent='未指定';sectionState.className='state-pill';
+  if (analysis) renderSummary(); renderIssues(); renderPlan();
+});
+window.addEventListener('beforeunload',()=>{
+  if(objectUrl)URL.revokeObjectURL(objectUrl);if(downloadUrl)URL.revokeObjectURL(downloadUrl);if(audioContext)audioContext.close().catch(()=>{});
+});
+
+})(window.__SPLC);
+
+document.documentElement.dataset.splcReady = 'true';
+  </script>
+</body>
+</html>
