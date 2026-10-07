@@ -259,8 +259,25 @@ footer { max-width: 1500px; margin: 0 auto; padding: 18px 0 34px; border-top: 1p
 .post-row small { color:var(--muted); font-size:10px; }
 .safety-note { margin-top:8px; padding:9px 11px; border:1px solid #594a30; color:#e9c77c; background:#16130d; font-size:11px; }
 
+
+.compact-control { display:flex; align-items:center; gap:7px; color:var(--muted); font-size:11px; }
+.compact-control select, .region-tools select {
+  background:#0e1319; color:var(--text); border:1px solid var(--line); padding:8px 9px; border-radius:0;
+}
+.region-tools { display:flex; flex-wrap:wrap; gap:7px; align-items:center; }
+.mastering-card .readiness-head { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; }
+.mastering-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
+.mastering-metric { border:1px solid #29313b; background:#0e1319; padding:10px 11px; display:grid; gap:3px; }
+.mastering-metric span { color:var(--muted); font-size:10px; }
+.mastering-metric strong { font-size:14px; font-variant-numeric:tabular-nums; }
+.mastering-notes { margin-top:10px; display:grid; gap:6px; font-size:11px; }
+.mastering-notes .ok-note { color:var(--ok); }
+.mastering-notes .warn-note { color:var(--med); }
+.mastering-notes .bad-note { color:var(--high); }
+
 @media (max-width: 760px) {
   .issue-grid { grid-template-columns:1fr; }
+  .mastering-grid { grid-template-columns:1fr 1fr; }
   .issue-head { flex-direction:column; }
   .post-row { grid-template-columns:1fr; gap:3px; }
 }
@@ -299,6 +316,12 @@ footer { max-width: 1500px; margin: 0 auto; padding: 18px 0 34px; border-top: 1p
         <div class="transport">
           <button id="playBtn" class="button">▶ 再生</button>
           <button id="stopBtn" class="button">■ 停止</button>
+          <label class="compact-control">解析感度
+            <select id="sensitivitySelect">
+              <option value="standard" selected>標準</option>
+              <option value="high">高感度</option>
+            </select>
+          </label>
           <button id="reanalyzeBtn" class="button">再解析</button>
           <button id="newFileBtn" class="button ghost">別のWAV</button>
         </div>
@@ -323,7 +346,13 @@ footer { max-width: 1500px; margin: 0 auto; padding: 18px 0 34px; border-top: 1p
               <p id="timeReadout" class="time-readout">00:00.000 / 00:00.000</p>
             </div>
             <div class="region-tools">
-              <button id="markRegionBtn" class="button small">再生成区間を指定</button>
+              <select id="regionPurposeSelect" aria-label="手動区間の修正内容">
+                <option value="section">再生成区間の音質合わせ</option>
+                <option value="fizz">高域のシュワシュワを抑える</option>
+                <option value="mud">低中域の濁りを抑える</option>
+                <option value="harshness">中高域の刺さりを抑える</option>
+              </select>
+              <button id="markRegionBtn" class="button small">選択区間を指定</button>
               <button id="clearRegionBtn" class="button small ghost">区間解除</button>
             </div>
           </div>
@@ -333,7 +362,7 @@ footer { max-width: 1500px; margin: 0 auto; padding: 18px 0 34px; border-top: 1p
           </div>
           <div class="playback-tools">
             <span>波形をクリック：再生位置移動</span>
-            <span>再生成区間指定中：ドラッグ選択</span>
+            <span>区間指定中：ドラッグして範囲選択</span>
           </div>
         </section>
 
@@ -368,13 +397,24 @@ footer { max-width: 1500px; margin: 0 auto; padding: 18px 0 34px; border-top: 1p
       <section class="card section-card">
         <div class="card-heading">
           <div>
-            <p class="section-label">再生成区間</p>
-            <h2>Open Editor 再生成区間</h2>
+            <p class="section-label">手動区間修正</p>
+            <h2>再生成区間・気になる箇所を指定</h2>
           </div>
           <span id="sectionState" class="state-pill">未指定</span>
         </div>
-        <p class="muted">発音修正などで再生成した部分を波形上で指定すると、前後と比べて音量・低中域・中高域・高域・チリつきの差を調べ、なじませる修正案を追加します。左右の広がりは確認だけ行い、自動では変更しません。</p>
+        <p class="muted">Open Editorで再生成した区間の音質合わせに加え、自動検出で拾えなかったシュワシュワ・濁り・刺さりも、波形上で手動指定して局所修正できます。パンやステレオ幅は変更しません。</p>
         <div id="sectionReport" class="section-report"></div>
+      </section>
+
+      <section class="card mastering-card">
+        <div class="readiness-head">
+          <div>
+            <p class="section-label">マスタリング前QC</p>
+            <h2>LANDR等へ渡す準備状態</h2>
+          </div>
+          <span id="masteringState" class="state-pill">未解析</span>
+        </div>
+        <div id="masteringReport"><p class="muted">解析完了後に、ピーク・True Peak・ヘッドルーム・ダイナミクスを確認します。</p></div>
       </section>
 
       <section class="card final-card">
@@ -1783,6 +1823,9 @@ const TYPE_STYLE = {
   start: '#ef7777',
   click: '#f0bf6a',
   percussive: '#b599ff',
+  mud: '#89a9ff',
+  harshness: '#ef9f77',
+  fizz: '#70d8da',
   change: '#70d8da',
 };
 
@@ -2027,6 +2070,7 @@ const trackName = $('#trackName');
 const trackMeta = $('#trackMeta');
 const playBtn = $('#playBtn');
 const stopBtn = $('#stopBtn');
+const sensitivitySelect = $('#sensitivitySelect');
 const reanalyzeBtn = $('#reanalyzeBtn');
 const newFileBtn = $('#newFileBtn');
 const analysisState = $('#analysisState');
@@ -2041,12 +2085,15 @@ const renderBtn = $('#renderBtn');
 const renderState = $('#renderState');
 const postCheck = $('#postCheck');
 const downloadBtn = $('#downloadBtn');
+const regionPurposeSelect = $('#regionPurposeSelect');
 const markRegionBtn = $('#markRegionBtn');
 const clearRegionBtn = $('#clearRegionBtn');
 const sectionState = $('#sectionState');
 const sectionReport = $('#sectionReport');
 const selectionInfo = $('#selectionInfo');
 const timeReadout = $('#timeReadout');
+const masteringState = $('#masteringState');
+const masteringReport = $('#masteringReport');
 
 let audioContext = null;
 let audioBuffer = null;
@@ -2136,6 +2183,9 @@ async function loadFile(file) {
   selectedRegion = null;
   sectionAnalysis = null;
   postCheck.classList.add('hidden');
+  masteringState.textContent = '未解析';
+  masteringState.className = 'state-pill';
+  masteringReport.innerHTML = '<p class="muted">解析中…</p>';
   downloadBtn.classList.add('hidden');
   if (downloadUrl) { URL.revokeObjectURL(downloadUrl); downloadUrl = null; }
 
@@ -2188,13 +2238,17 @@ async function runAnalysis() {
   issueList.innerHTML = '<p class="muted">解析中…</p>';
   summaryList.innerHTML = '<p class="muted">解析中…</p>';
   try {
-    analysis = await analyzeAudio(audioBuffer, (p, text) => setProgress(0.05 + p * 0.85, text, '解析中'));
+    analysis = await analyzeAudio(audioBuffer, (p, text) => setProgress(0.05 + p * 0.85, text, '解析中'), {sensitivity:sensitivitySelect.value});
     waveform.setEvents(analysis.events);
     issues = buildIssues(analysis);
-    if (selectedRegion) upsertSectionIssue();
+    if (selectedRegion) {
+      if (selectedRegion.purpose === 'section') upsertSectionIssue();
+      else upsertManualIssue(selectedRegion.purpose);
+    }
     renderSummary();
     renderIssues();
     renderPlan();
+    renderMasteringCheck(analysis);
     setProgress(1, `解析完了 — ${issues.length}件の確認候補`, '完了');
   } catch (err) {
     console.error(err);
@@ -2355,7 +2409,7 @@ function renderSummary() {
 
 function renderIssues() {
   if (!issues.length) {
-    issueList.innerHTML = '<div class="clean-state"><strong>大きな問題候補は見つかりませんでした。</strong><span>必要なら再生成区間だけ手動指定できます。</span></div>';
+    issueList.innerHTML = '<div class="clean-state"><strong>大きな問題候補は見つかりませんでした。</strong><span>必要なら気になる区間を手動指定して局所修正できます。</span></div>';
     updateApprovalUI();
     return;
   }
@@ -2410,6 +2464,46 @@ function renderPlan() {
   }
 }
 
+
+function rmsAudioBufferRange(buffer, startSec = 0, endSec = buffer.duration) {
+  const sr = buffer.sampleRate;
+  const start = clamp(Math.floor(startSec * sr), 0, buffer.length - 1);
+  const end = clamp(Math.ceil(endSec * sr), start + 1, buffer.length);
+  let sum = 0, n = 0;
+  for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+    const d = buffer.getChannelData(ch);
+    for (let i = start; i < end; i++) { sum += d[i] * d[i]; n++; }
+  }
+  return n ? Math.sqrt(sum / n) : 0;
+}
+
+function renderMasteringCheck(a) {
+  if (!a?.metrics) return;
+  const m = a.metrics;
+  const r = a.readiness || {status:'CHECK',blockers:[],warnings:[]};
+  const fileWarnings = [];
+  if (audioBuffer.sampleRate < 44100) fileWarnings.push('サンプルレートが44.1kHz未満');
+  if ((wavMeta?.bitDepth || 24) < 24) fileWarnings.push('24bit未満のWAV');
+  const status = r.status === 'READY' && fileWarnings.length ? 'CHECK' : r.status;
+  const label = status === 'READY' ? 'MASTERING READY' : status === 'NOT_READY' ? '修正推奨' : '要確認';
+  masteringState.textContent = label;
+  masteringState.className = 'state-pill ' + (status === 'READY' ? 'done' : status === 'CHECK' ? 'running' : '');
+  const metric = (name,value) => '<div class="mastering-metric"><span>' + name + '</span><strong>' + value + '</strong></div>';
+  const notes = [];
+  for (const x of (r.blockers || [])) notes.push('<div class="bad-note">● ' + escapeHtml(x) + '</div>');
+  for (const x of [...(r.warnings || []), ...fileWarnings]) notes.push('<div class="warn-note">● ' + escapeHtml(x) + '</div>');
+  if (!notes.length) notes.push('<div class="ok-note">✓ 大きな技術的問題は見つかりません。マスタリングへ進める状態です。</div>');
+  masteringReport.innerHTML =
+    '<div class="mastering-grid">' +
+      metric('Sample Peak', m.samplePeakDb.toFixed(2) + ' dBFS') +
+      metric('推定 True Peak', m.estimatedTruePeakDb.toFixed(2) + ' dBTP') +
+      metric('ピークヘッドルーム', m.headroomDb.toFixed(2) + ' dB') +
+      metric('Crest Factor', m.crestDb.toFixed(1) + ' dB') +
+      metric('短時間の音量差', m.shortTermVariationDb.toFixed(1) + ' dB') +
+      metric('WAV形式', audioBuffer.sampleRate.toLocaleString() + ' Hz / ' + (wavMeta?.bitDepth || 24) + ' bit') +
+    '</div><div class="mastering-notes">' + notes.join('') + '</div>';
+}
+
 async function previewIssue(issue, fixed) {
   if (!audioBuffer || !issue) return;
   stopAllAudio();
@@ -2420,27 +2514,77 @@ async function previewIssue(issue, fixed) {
   const b = renderedToAudioBuffer(audioContext, rendered);
   previewSource = audioContext.createBufferSource();
   previewSource.buffer = b;
-  previewSource.connect(audioContext.destination);
+
+  const gainNode = audioContext.createGain();
+  let previewGain = 1;
+  if (fixed && issue.operation) {
+    const originalRms = rmsAudioBufferRange(audioBuffer, rendered.sourceStartSec, rendered.sourceStartSec + b.duration);
+    const fixedRms = rmsAudioBufferRange(b, 0, b.duration);
+    if (originalRms > 1e-7 && fixedRms > 1e-7) {
+      const rawGain = originalRms / fixedRms;
+      const minGain = Math.pow(10, -3/20);
+      const maxGain = Math.pow(10, 3/20);
+      previewGain = clamp(rawGain, minGain, maxGain);
+    }
+  }
+  gainNode.gain.value = previewGain;
+  previewSource.connect(gainNode);
+  gainNode.connect(audioContext.destination);
   previewSource.onended = () => { previewSource = null; };
   previewSource.start();
-  const card = issueList.querySelector(`[data-issue-id="${issue.id}"]`);
+
+  const card = issueList.querySelector('[data-issue-id="' + issue.id + '"]');
   const old = card?.querySelector('.preview-status');
   old?.remove();
   if (card) {
     const badge = document.createElement('span');
     badge.className = 'preview-status';
-    badge.textContent = fixed ? '修正後を再生中' : '修正前を再生中';
+    badge.textContent = fixed ? '修正後を再生中（音量差補正）' : '修正前を再生中';
     card.querySelector('.issue-actions').appendChild(badge);
   }
 }
 
 function handleRegion(start, end) {
-  selectedRegion = {start,end};
+  const purpose = regionPurposeSelect.value || 'section';
+  selectedRegion = {start,end,purpose};
   selectionInfo.classList.remove('hidden');
-  selectionInfo.textContent = `再生成区間: ${formatTime(start)} → ${formatTime(end)} (${(end-start).toFixed(2)}秒)`;
+  const purposeLabel = purpose === 'section' ? '再生成区間'
+    : purpose === 'fizz' ? '高域シュワシュワ'
+    : purpose === 'mud' ? '低中域の濁り'
+    : '中高域の刺さり';
+  selectionInfo.textContent = purposeLabel + ': ' + formatTime(start) + ' → ' + formatTime(end) + ' (' + (end-start).toFixed(2) + '秒)';
   sectionState.textContent = '区間指定済み';
   sectionState.className = 'state-pill done';
-  if (analysis) upsertSectionIssue();
+  if (!analysis) return;
+  if (purpose === 'section') upsertSectionIssue();
+  else upsertManualIssue(purpose);
+}
+
+
+function upsertManualIssue(purpose) {
+  if (!selectedRegion || !analysis) return;
+  issues = issues.filter(i => i.id !== 'manual-region');
+  approved.delete('manual-region');
+  const map = {
+    fizz: {title:'手動指定：高域のチリつき・シュワシュワ', freqHz:8200, Q:0.707, filterType:'highshelf', gainDb:-1.2, text:'指定区間だけ高域のノイズ状成分を穏やかに抑えます。'},
+    mud: {title:'手動指定：低中域の濁り', freqHz:320, Q:0.9, filterType:'peaking', gainDb:-1.2, text:'指定区間だけ150〜500Hz付近の濁りを穏やかに整理します。'},
+    harshness: {title:'手動指定：中高域の刺さり', freqHz:4300, Q:1.0, filterType:'peaking', gainDb:-1.2, text:'指定区間だけ2〜6kHz付近の硬さ・刺さりを穏やかに整理します。'}
+  };
+  const cfg = map[purpose];
+  if (!cfg) return;
+  const op = {
+    type:'localTone', subtype:purpose,
+    events:[{startSec:selectedRegion.start,endSec:selectedRegion.end,freqHz:cfg.freqHz,Q:cfg.Q,filterType:cfg.filterType,gainDb:cfg.gainDb}]
+  };
+  issues.push({
+    id:'manual-region', title:cfg.title, severity:'MEDIUM', confidence:100,
+    problem:'自動検出ではなく、ユーザーが ' + formatTime(selectedRegion.start) + '〜' + formatTime(selectedRegion.end) + ' を指定しました。',
+    direction:cfg.text + ' 修正前後を必ず試聴してください。',
+    operation:op, previewTime:(selectedRegion.start+selectedRegion.end)/2, repairable:true, safe:false,
+  });
+  sectionReport.innerHTML = '<div class="section-suggestion"><strong>' + escapeHtml(cfg.title) + '</strong><span>' +
+    formatTime(selectedRegion.start) + '〜' + formatTime(selectedRegion.end) + ' / 約-1.2 dBの局所補正</span></div>';
+  renderSummary(); renderIssues(); renderPlan();
 }
 
 function upsertSectionIssue() {
@@ -2498,7 +2642,7 @@ async function renderFinal() {
     const rendered = renderRepairs(audioBuffer, operations, {safetyGain:true});
     setProgress(0.62, '修正後WAVを再チェックしています…', '解析中');
     const renderedBuffer = renderedToAudioBuffer(audioContext, rendered);
-    postAnalysis = await analyzeAudio(renderedBuffer, (p,text)=>setProgress(0.62+p*0.30, `修正後チェック: ${text}`, '解析中'));
+    postAnalysis = await analyzeAudio(renderedBuffer, (p,text)=>setProgress(0.62+p*0.30, `修正後チェック: ${text}`, '解析中'), {sensitivity:sensitivitySelect.value});
 
     const inputDepth = [16,24,32].includes(wavMeta?.bitDepth) ? wavMeta.bitDepth : 24;
     const float32 = wavMeta?.audioFormat === 3 && inputDepth === 32;
@@ -2511,8 +2655,10 @@ async function renderFinal() {
     downloadBtn.classList.remove('hidden');
 
     renderPostCheck(rendered, chosen);
-    renderState.textContent = 'LANDRへ送れます';
-    renderState.className = 'state-pill done';
+    renderMasteringCheck(postAnalysis);
+    const finalStatus = postAnalysis.readiness?.status || 'CHECK';
+    renderState.textContent = finalStatus === 'READY' ? 'MASTERING READY' : finalStatus === 'NOT_READY' ? '修正推奨' : '要確認';
+    renderState.className = 'state-pill ' + (finalStatus === 'READY' ? 'done' : finalStatus === 'CHECK' ? 'running' : '');
     setProgress(1, '修正後の再チェックが完了しました。WAVを保存できます。', '完了');
   } catch (err) {
     console.error(err);
@@ -2527,19 +2673,23 @@ async function renderFinal() {
 
 function renderPostCheck(rendered, chosen) {
   const before = analysis.summary, after = postAnalysis.summary;
-  const row = (name,b,a,extra='') => `<div class="post-row"><span>${name}</span><strong>${b} → ${a}</strong><small>${extra}</small></div>`;
-  postCheck.innerHTML = `<div class="post-title"><strong>修正後チェック</strong><span>${chosen.length}件の修正を適用</span></div>
-    ${row('曲頭ノイズ',severityLabel(before.start.severity),severityLabel(after.start.severity))}
-    ${row('プツッ・パチッ音',before.click.count,after.click.count)}
-    ${row('波形の中心ズレ',severityLabel(before.dc.severity),severityLabel(after.dc.severity))}
-    ${row('不要な超低域',severityLabel(before.subsonic.severity),severityLabel(after.subsonic.severity))}
-    ${row('低中域の濁り',severityLabel(before.mud.severity),severityLabel(after.mud.severity))}
-    ${row('中高域の刺さり',severityLabel(before.harshness.severity),severityLabel(after.harshness.severity))}
-    ${row('高域のチリつき',severityLabel(before.fizz.severity),severityLabel(after.fizz.severity))}
-    ${row('打楽器の高域の刺さり',before.percussive.count,after.percussive.count)}
-    ${row('書き出し形式',`${audioBuffer.sampleRate} Hz`,`${rendered.sampleRate} Hz`, `${wavMeta?.bitDepth || 24} bit / ${rendered.channels.length===2?'ステレオ':rendered.channels.length+' ch'}`)}
-    <div class="preserve-line">ステレオ幅 / パン / リバーブ / ダイナミクス / LUFS：意図的に変更していません。</div>
-    ${rendered.safety.applied ? `<div class="safety-note">修正後の音割れを防ぐため、左右同じ量だけ全体音量を ${rendered.safety.gainDb.toFixed(2)} dB 調整しました。</div>`:''}`;
+  const bm = analysis.metrics, am = postAnalysis.metrics;
+  const row = (name,b,a,extra='') => '<div class="post-row"><span>' + name + '</span><strong>' + b + ' → ' + a + '</strong><small>' + extra + '</small></div>';
+  postCheck.innerHTML = '<div class="post-title"><strong>修正後チェック</strong><span>' + chosen.length + '件の修正を適用</span></div>' +
+    row('曲頭ノイズ',severityLabel(before.start.severity),severityLabel(after.start.severity)) +
+    row('プツッ・パチッ音',before.click.count,after.click.count) +
+    row('波形の中心ズレ',severityLabel(before.dc.severity),severityLabel(after.dc.severity)) +
+    row('不要な超低域',severityLabel(before.subsonic.severity),severityLabel(after.subsonic.severity)) +
+    row('低中域の濁り',severityLabel(before.mud.severity),severityLabel(after.mud.severity)) +
+    row('中高域の刺さり',severityLabel(before.harshness.severity),severityLabel(after.harshness.severity)) +
+    row('高域のシュワシュワ',severityLabel(before.fizz.severity),severityLabel(after.fizz.severity)) +
+    row('Sample Peak',bm.samplePeakDb.toFixed(2)+' dBFS',am.samplePeakDb.toFixed(2)+' dBFS') +
+    row('推定 True Peak',bm.estimatedTruePeakDb.toFixed(2)+' dBTP',am.estimatedTruePeakDb.toFixed(2)+' dBTP') +
+    row('ヘッドルーム',bm.headroomDb.toFixed(2)+' dB',am.headroomDb.toFixed(2)+' dB') +
+    row('Crest Factor',bm.crestDb.toFixed(1)+' dB',am.crestDb.toFixed(1)+' dB') +
+    row('書き出し形式',audioBuffer.sampleRate+' Hz',rendered.sampleRate+' Hz',(wavMeta?.bitDepth || 24)+' bit / '+(rendered.channels.length===2?'ステレオ':rendered.channels.length+' ch')) +
+    '<div class="preserve-line">ステレオ幅 / パン / リバーブ / ダイナミクス / LUFS：意図的に変更していません。</div>' +
+    (rendered.safety.applied ? '<div class="safety-note">修正による新規クリッピング防止のため、左右同量で ' + rendered.safety.gainDb.toFixed(2) + ' dB 調整しました。</div>' : '');
   postCheck.classList.remove('hidden');
 }
 
@@ -2571,13 +2721,14 @@ dropZone.addEventListener('drop',e=>loadFile(e.dataTransfer.files?.[0]));
 playBtn.addEventListener('click',togglePlay);
 stopBtn.addEventListener('click',stop);
 reanalyzeBtn.addEventListener('click',runAnalysis);
+sensitivitySelect.addEventListener('change',()=>{ if(audioBuffer && !busy) runAnalysis(); });
 renderBtn.addEventListener('click',renderFinal);
 markRegionBtn.addEventListener('click',()=>{
   regionMode=!regionMode; waveform.setRegionMode(regionMode); markRegionBtn.classList.toggle('active',regionMode);
-  markRegionBtn.textContent=regionMode?'波形をドラッグ…':'再生成区間を指定';
+  markRegionBtn.textContent=regionMode?'波形をドラッグ…':'選択区間を指定';
 });
 clearRegionBtn.addEventListener('click',()=>{
-  selectedRegion=null;sectionAnalysis=null;approved.delete('section-match');issues=issues.filter(i=>i.id!=='section-match');
+  selectedRegion=null;sectionAnalysis=null;approved.delete('section-match');approved.delete('manual-region');issues=issues.filter(i=>i.id!=='section-match'&&i.id!=='manual-region');
   waveform.clearSelection();selectionInfo.classList.add('hidden');sectionReport.innerHTML='';sectionState.textContent='未指定';sectionState.className='state-pill';
   if (analysis) renderSummary(); renderIssues(); renderPlan();
 });
